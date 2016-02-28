@@ -76,7 +76,7 @@ randomDirections l = flattenEM <$> replicateM l (arbitrary [left, right] 2)
 --    -> Int -- | pair
 --    -> m (GProgram op t, GProgram op t)
 --subtreeCrossoverUniform ps = subtreeCrossoverGen ps . sample . uniform 1
---
+
 subtreeCrossoverGen
     :: (MonadRandom m)
     => (GProgram op t, GProgram op t)
@@ -84,19 +84,16 @@ subtreeCrossoverGen
     -> m (GProgram op t, GProgram op t)
 subtreeCrossoverGen ps g = do
     r <- g
-    crossover' ps <$> randomDirections r <*> randomDirections r
+    let (r1, r2) = commonRegions r ps
+    mkProgramTuple <$> arbitrary' r1  <*> arbitrary' r2
+  where
+    mkProgramTuple = (bimap' fromGPZipper . ) . (, )
 
 commonRegions
     :: Int
     -> (GProgram op t, GProgram op t)
     -> ([GPZipper op t], [GPZipper op t])
 commonRegions height = bimap' (subZippers height) . bimap' toGPZipper
-
-crossover
-    :: (GPZipper op t, GPZipper op t)
-    -> (GProgram op t, GProgram op t)
-crossover =
-    bimap' fromGPZipper . switch
 
 --- <<< VARIOUS UTILITY FUNCTIONS ---------------------------------------------
 
@@ -108,5 +105,8 @@ bimap' a = bimap a a
 
 arbitrary :: (MonadRandom m) => [a] -> Int -> m a
 arbitrary list elems = (list !!) <$> sample (uniform 0 $ elems - 1)
+
+arbitrary' :: (MonadRandom m) => [a] -> m a
+arbitrary' list = arbitrary list (length list)
 
 --- >>> VARIOUS UTILITY FUNCTIONS ---------------------------------------------
