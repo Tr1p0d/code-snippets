@@ -87,7 +87,7 @@ subtreeCrossoverGen ps g = do
     let (r1, r2) = commonRegions r ps
     mkProgramTuple <$> arbitrary' r1  <*> arbitrary' r2
   where
-    mkProgramTuple = (bimap' fromGPZipper . ) . (, )
+    mkProgramTuple = ((bimap' fromGPZipper . switch) . ) . (, )
 
 commonRegions
     :: Int
