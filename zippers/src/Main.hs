@@ -34,7 +34,9 @@ sampleTree1 =
             (Leaf (Const 1))
             (Leaf (Const 2))
         )
-        (Leaf (Const 3)
+        (Node 1 Minus
+            (Leaf (Const 3))
+            (Leaf (Const 4))
         )
 
 sampleTree2 :: GProgram Operation Terminal
@@ -75,38 +77,20 @@ randomDirections l = flattenEM <$> replicateM l (arbitrary [left, right] 2)
 --    -> m (GProgram op t, GProgram op t)
 --subtreeCrossoverUniform ps = subtreeCrossoverGen ps . sample . uniform 1
 --
---subtreeCrossoverGen
---    :: (MonadRandom m)
---    => (GProgram op t, GProgram op t)
---    -> m Int
---    -> m (GProgram op t, GProgram op t)
---subtreeCrossoverGen ps g = do
---    r <- g
---    crossover' ps <$> randomDirections r <*> randomDirections r
+subtreeCrossoverGen
+    :: (MonadRandom m)
+    => (GProgram op t, GProgram op t)
+    -> m Int
+    -> m (GProgram op t, GProgram op t)
+subtreeCrossoverGen ps g = do
+    r <- g
+    crossover' ps <$> randomDirections r <*> randomDirections r
 
-commonRegion
-    :: (GProgram op t, GProgram op t)
-    -> Int
-    -> m (Maybe (GPZipper op t, GPZipper op t))
-commonRegion ps@(p1, p2) height
-    | (_height p1) < d || (_height p2) < depth = return Nothing
-    | otherwise = commonRegion' ps height
-
-commonRegion'
-    :: (GProgram op t, GProgram op t)
-    -> Int
-    -> m (Maybe (GPZipper op t, GPZipper op t))
-commonRegion' (p1, p2) height =
-    case (subPsHighEnough p1, subPsHighEnough p2) of
-        --([lsp1, rsp1], [lsp2, rsp2]) -> commonRegion' subHeight
-        --([sp1], [lsp2, rsp2]) ->
-        --([lsp1, rsp1], [sp2]) ->
-            ([sp1], [sp2]) ->
-        otherwise -> Nothing
-  where
-    subHeight = height - 1
-    subPsHighEnough p = filter highEnough [_rSubTree p, _lSubTree p]
-    highEnough sp = _height sp >= height
+commonRegions
+    :: Int
+    -> (GProgram op t, GProgram op t)
+    -> ([GPZipper op t], [GPZipper op t])
+commonRegions height = bimap' (subZippers height) . bimap' toGPZipper
 
 crossover
     :: (GPZipper op t, GPZipper op t)

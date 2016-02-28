@@ -1,7 +1,11 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Zippers where
 
 import Data.Maybe (isJust)
 import Data.Monoid (Endo)
+
+import Control.Lens ((^.), makeLenses)
 
 data GProgram op t
     = Node
@@ -15,15 +19,31 @@ data GProgram op t
         }
     deriving (Show)
 
-data GPZipper op t = Focus (GProgram op t) [GPContext op t]
-    deriving (Show)
+makeLenses ''GProgram
 
 data GPContext op t
     = RSubProgram Int op (GProgram op t)
     | LSubProgram Int op (GProgram op t)
     deriving (Show)
 
+makeLenses ''GPContext
+
+data GPZipper op t = Focus (GProgram op t) [GPContext op t]
+    deriving (Show)
+
+makeLenses ''GPZipper
+
+
 type NavigationStep op t = GPZipper op t -> GPZipper op t
+
+-- <<< UTILITY FUNCS ----------------------------------------------------------
+
+subZippers :: Int -> GPZipper op t -> [GPZipper op t]
+subZippers height (Focus (Leaf _)  _) = []
+subZippers height z@(Focus a _)
+    | (_height a) < height = []
+    | (_height a) == height = [z]
+    | otherwise = subZippers height (left z) ++ subZippers height (right z)
 
 -- <<< CONSTRUCTORS -----------------------------------------------------------
 
