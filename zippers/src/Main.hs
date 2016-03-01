@@ -3,11 +3,12 @@
 
 import Control.Monad (replicateM)
 
+import Control.Lens ((^.))
 import Data.Bifunctor (Bifunctor, bimap)
 import Data.Monoid (Endo(appEndo,Endo))
 import Data.Random (sample, MonadRandom)
 import Data.Random.Distribution.Uniform (stdUniform, uniform)
-import Data.Random.Distribution.Exponential (exponential)
+import Data.Random.Distribution.Bernoulli (bernoulli)
 
 import Zippers
 
@@ -31,26 +32,28 @@ sampleTree1 :: GProgram Operation Terminal
 sampleTree1 =
     Node 2 Plus
         (Node 1 Minus
-            (Leaf (Const 1))
-            (Leaf (Const 2))
+            (Leaf 0 (Const 1))
+            (Leaf 0 (Const 2))
         )
         (Node 1 Minus
-            (Leaf (Const 3))
-            (Leaf (Const 4))
+            (Leaf 0 (Const 3))
+            (Leaf 0 (Const 4))
         )
 
 sampleTree2 :: GProgram Operation Terminal
 sampleTree2 =
     Node 2 Minus
         (Node 1 Plus
-            (Leaf (Const 1))
-            (Leaf (Const 2))
+            (Leaf 0 (Const 5))
+            (Leaf 0 (Const 6))
         )
-        (Leaf (Const 3)
+        (Node 1 Plus
+            (Leaf 0 (Const 7))
+            (Leaf 0 (Const 8))
         )
 
 full :: (MonadRandom m) => Int -> m (GProgram Operation Terminal)
-full 0 = Leaf <$> Const <$> sample stdUniform
+full 0 = Leaf 0 <$> Const <$> sample stdUniform
 full n = Node n <$> arbitrary [Plus, Minus] 2 <*> subProg <*> subProg
   where
     subProg = full $ n - 1
@@ -58,24 +61,31 @@ full n = Node n <$> arbitrary [Plus, Minus] 2 <*> subProg <*> subProg
 randomDirections :: (MonadRandom m) => Int -> m (NavigationStep op t)
 randomDirections l = flattenEM <$> replicateM l (arbitrary [left, right] 2)
 
---subtreeCrossoverExponential
---    :: (MonadRandom m)
---    => (GProgram op t, GProgram op t)
---    -> Int      -- | Depth
---    -> Float    -- | Lambda
---    -> m (GProgram op t, GProgram op t)
---subtreeCrossoverExponential ps = (subtreeCrossoverGen ps .) . generator
---  where
---    generator depth lambda = do
---        er <- round <$> sample (exponential lambda)
---        return $ if er > depth then depth else er
---
---subtreeCrossoverUniform
---    :: (MonadRandom m)
---    => (GProgram op t, GProgram op t)
---    -> Int -- | pair
---    -> m (GProgram op t, GProgram op t)
---subtreeCrossoverUniform ps = subtreeCrossoverGen ps . sample . uniform 1
+subtreeCrossoverPreferLeafs
+    :: (MonadRandom m)
+    => (GProgram op t, GProgram op t)
+    -> Int      -- | Uppwer bound
+    -> Float    -- | percentil of Leaf preference
+    -> m (GProgram op t, GProgram op t)
+subtreeCrossoverPreferLeafs ps ub preference = do
+    leaf <- sample $ bernoulli preference
+    if leaf then subtreeCrossoverLeaf ps else subtreeCrossoverUniformNodes ps ub
+
+subtreeCrossoverUniform
+    :: (MonadRandom m)
+    => (GProgram op t, GProgram op t)
+    -> Int -- | Uppwer bound
+    -> m (GProgram op t, GProgram op t)
+subtreeCrossoverUniform ps ub = subtreeCrossoverUniformGen ps 0 ub
+
+subtreeCrossoverUniformGen
+    :: (MonadRandom m)
+    => (GProgram op t, GProgram op t)
+    -> Int -- | Lower bound
+    -> Int -- | Uppwer bound
+    -> m (GProgram op t, GProgram op t)
+subtreeCrossoverUniformGen ps@(p1,p2) lb ub =
+    subtreeCrossoverGen ps $ sample $ uniform lb ub
 
 subtreeCrossoverGen
     :: (MonadRandom m)
@@ -86,8 +96,19 @@ subtreeCrossoverGen ps g = do
     r <- g
     let (r1, r2) = commonRegions r ps
     mkProgramTuple <$> arbitrary' r1  <*> arbitrary' r2
-  where
-    mkProgramTuple = ((bimap' fromGPZipper . switch) . ) . (, )
+
+subtreeCrossoverLeaf
+    :: (MonadRandom m)
+    => (GProgram op t, GProgram op t)
+    -> m (GProgram op t, GProgram op t)
+subtreeCrossoverLeaf ps = subtreeCrossoverGen ps $ return 0
+
+subtreeCrossoverUniformNodes
+    :: (MonadRandom m)
+    => (GProgram op t, GProgram op t)
+    -> Int -- | Uppwer bound
+    -> m (GProgram op t, GProgram op t)
+subtreeCrossoverUniformNodes ps ub = subtreeCrossoverUniformGen ps 1 ub
 
 commonRegions
     :: Int
@@ -108,5 +129,7 @@ arbitrary list elems = (list !!) <$> sample (uniform 0 $ elems - 1)
 
 arbitrary' :: (MonadRandom m) => [a] -> m a
 arbitrary' list = arbitrary list (length list)
+
+mkProgramTuple = ((bimap' fromGPZipper . switch) . ) . (, )
 
 --- >>> VARIOUS UTILITY FUNCTIONS ---------------------------------------------
