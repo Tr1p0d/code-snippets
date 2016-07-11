@@ -84,6 +84,7 @@ executable eamain
                        , MonadRandom
                        , transformers
                        , monad-coroutine
+                       , monad-parallel
 
   -- Directories containing source files.
   hs-source-dirs:      src
