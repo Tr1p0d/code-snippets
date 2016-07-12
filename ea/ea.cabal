@@ -50,6 +50,7 @@ library
     GeneticPipeline.GeneticPipeline
     GeneticPipeline.Selection
     GeneticPipeline.Crossover
+    GeneticPipeline.Join
 
   -- Modules included in this executable, other than Main.
   -- other-modules:

@@ -9,13 +9,13 @@ import qualified Data.Vector.Mutable as MV
 
 import GeneticPipeline.GeneticPipeline
 
-pointCrossover :: GeneticPipeline (MV.IOVector a) (Maybe (MV.IOVector a)) IO ()
+pointCrossover :: GeneticPipeline (MV.IOVector a) (MV.IOVector a) IO ()
 pointCrossover = forever $ do
-    v11 <- awaitGP
-    v12 <- awaitGP
-    lift $ sequence_ $ singlePointCrossover <$> v11 <*> v12
-    yieldGP v11
-    yieldGP v12
+    Just v1 <- awaitGP
+    Just v2 <- awaitGP
+    lift $ singlePointCrossover v1 v2
+    yieldGP v1
+    yieldGP v2
   where
     singlePointCrossover v1 v2 = do
         crossoverPoint <- getRandomR (0, MV.length v1 - 1)
@@ -24,4 +24,4 @@ pointCrossover = forever $ do
     unsafeSwapElements v1 v2 ix = do
         e1 <- MV.unsafeRead v1 ix
         MV.unsafeRead v2 ix >>= MV.unsafeWrite v1 ix
-        MV.unsafeWrite v1 ix e1
+        MV.unsafeWrite v2 ix e1

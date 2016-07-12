@@ -5,7 +5,7 @@ import Control.Monad.Coroutine
 import Control.Monad.Coroutine.SuspensionFunctors (Yield(Yield), Await(Await))
 import qualified Control.Monad.Parallel as MP (MonadParallel(bindM2))
 import Data.Functor.Sum (Sum(InL, InR))
-import qualified Data.Vector.Mutable as MV (IOVector)
+import qualified Data.Vector as V (Vector)
 import Data.Void (Void)
 
 
@@ -22,13 +22,16 @@ type Selection b = GeneticPipeline Void b IO ()
 
 type GeneticOp a b = GeneticPipeline a b IO ()
 
-type Population a = MV.IOVector a
+type Population a = V.Vector a
 
 yieldGP :: Monad m => b -> GeneticPipeline a b m ()
 yieldGP = suspend . InR . flip Yield (return ())
 
 awaitGP :: Monad m => GeneticPipeline a b m (Maybe a)
 awaitGP = suspend $ InL $ Await return
+
+runGeneticPipeline :: Monad m => GeneticPipeline Void Void m r -> m r
+runGeneticPipeline = runCoroutine . mapSuspension (let a=a in a)
 
 route
     :: Monad m
@@ -70,5 +73,51 @@ route bind t1 t2 = Coroutine (bind proceed (resume t1) (resume t2))
     -> GeneticPipeline a c m ()
 (=>>=) = route MP.bindM2
 
-runGeneticPipeline :: Monad m => GeneticPipeline Void Void m r -> m r
-runGeneticPipeline = runCoroutine . mapSuspension (let a=a in a)
+-- Join
+awaitJoinL :: Monad m => GeneticJoin a m (Maybe a)
+awaitJoinL = suspend $ InL $ InL $ Await return
+
+awaitJoinR :: Monad m => GeneticJoin a m (Maybe a)
+awaitJoinR = suspend $ InL $ InR $ Await return
+
+yieldJoin :: Monad m => a -> GeneticJoin a m ()
+yieldJoin = suspend . InR . flip Yield (return ())
+
+join :: Monad m
+    => (forall a' b' c' d' . (a' -> b' -> c' -> m d')
+        -> m a' -> m b' -> m c' -> m d')
+    -> GeneticPipeline a b m r
+    -> GeneticPipeline a b m r'
+    -> GeneticJoin b m r''
+    -> GeneticPipeline a b m r''
+join bind t1 t2 j = Coroutine (bind proceed (resume t1) (resume t2) (resume j))
+  where
+    proceed (Left (InL s)) c2 j' = return (Left $ InL $ fmap
+        (\x -> join bind x (Coroutine $ return c2) (Coroutine $ return j')) s)
+    proceed c1 (Left (InL s)) j' = return (Left $ InL $ fmap
+        (\x -> join bind (Coroutine $ return c1) x (Coroutine $ return j')) s)
+    proceed c1 c2 (Left (InR s)) = return (Left $ InR $ fmap
+        (\x -> join bind (Coroutine $ return c1) (Coroutine $ return c2) x) s)
+    proceed (Left (InR (Yield x c1))) c2 (Left (InL (InL (Await f)))) =
+        resume $ join bind c1 (Coroutine $ return c2) (f $ Just x)
+    proceed c1 (Left (InR (Yield x c2))) (Left (InL (InR (Await f)))) =
+        resume $ join bind (Coroutine $ return c1) c2 (f $ Just x)
+    proceed (Right x) c2 (Left (InL (InL (Await f)))) =
+        resume $ join bind (return x) (Coroutine $ return c2) (f Nothing)
+    proceed c1 (Right x) (Left (InL (InR (Await f)))) =
+        resume $ join bind (Coroutine $ return c1) (return x) (f Nothing)
+    --proceed (Left (InR _)) (Left (InR _)) (Right z) = return $ Right z
+    proceed _ _ (Right z) = return $ Right z
+
+(=><=) :: Monad m
+    => GeneticPipeline a b m r
+    -> GeneticPipeline a b m r'
+    -> GeneticJoin b m r''
+    -> GeneticPipeline a b m r''
+(=><=) = join bindM3
+  where
+    bindM3 f m1 m2 m3 = do
+        v1 <- m1
+        v2 <- m2
+        v3 <- m3
+        f v1 v2 v3
