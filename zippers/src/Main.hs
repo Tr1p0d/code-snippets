@@ -118,18 +118,10 @@ commonRegions height = bimap' (subZippers height) . bimap' toGPZipper
 
 --- <<< VARIOUS UTILITY FUNCTIONS ---------------------------------------------
 
-flattenEM :: [a -> a] -> a -> a
-flattenEM = appEndo . mconcat . map Endo
-
-bimap' :: (Bifunctor p) => (a -> b) -> p a a -> p b b
-bimap' a = bimap a a
-
 arbitrary :: (MonadRandom m) => [a] -> Int -> m a
 arbitrary list elems = (list !!) <$> sample (uniform 0 $ elems - 1)
 
 arbitrary' :: (MonadRandom m) => [a] -> m a
 arbitrary' list = arbitrary list (length list)
-
-mkProgramTuple = ((bimap' fromGPZipper . switch) . ) . (, )
 
 --- >>> VARIOUS UTILITY FUNCTIONS ---------------------------------------------

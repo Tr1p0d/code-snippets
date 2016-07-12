@@ -78,12 +78,12 @@ maybeUp (Focus a (ctx:ctxs)) = Just $ case ctx of
 
 right :: GPZipper op t -> GPZipper op t
 right z@(Focus a ctxs) = case a of
-    Node op i l r -> Focus r $ RSubProgram op i l:ctxs
+    Node op h l r -> Focus r $ RSubProgram op h l:ctxs
     Leaf _ _ -> z
 
 left :: GPZipper op t -> GPZipper op t
 left z@(Focus a ctxs) = case a of
-    Node op i l r -> Focus l $ LSubProgram op i r:ctxs
+    Node op h l r -> Focus l $ LSubProgram op h r:ctxs
     Leaf _ _ -> z
 
 up :: GPZipper op t -> GPZipper op t
