@@ -11,8 +11,10 @@ import Data.Void (Void)
 
 type GeneticPipeline a b m r =
     Coroutine (Sum (Await (Maybe a)) (Yield b)) m r
+
 type GeneticSplitter b m r =
     Coroutine (Sum (Await (Maybe b)) (Sum (Yield b) (Yield b))) m r
+
 type GeneticJoin a m r =
     Coroutine (Sum (Sum (Await (Maybe a)) (Await (Maybe a))) (Yield a)) m r
 
