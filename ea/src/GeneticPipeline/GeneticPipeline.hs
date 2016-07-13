@@ -3,7 +3,7 @@ module GeneticPipeline.GeneticPipeline where
 
 import Control.Monad.Coroutine
 import Control.Monad.Coroutine.SuspensionFunctors (Yield(Yield), Await(Await))
-import qualified Control.Monad.Parallel as MP (MonadParallel(bindM2))
+import qualified Control.Monad.Parallel as MP (MonadParallel(bindM2), bindM3)
 import Data.Functor.Sum (Sum(InL, InR))
 import qualified Data.Vector as V (Vector)
 import Data.Void (Void)
@@ -109,15 +109,22 @@ join bind t1 t2 j = Coroutine (bind proceed (resume t1) (resume t2) (resume j))
     --proceed (Left (InR _)) (Left (InR _)) (Right z) = return $ Right z
     proceed _ _ (Right z) = return $ Right z
 
-(=><=) :: Monad m
+(>=<) :: Monad m
     => GeneticPipeline a b m r
     -> GeneticPipeline a b m r'
     -> GeneticJoin b m r''
     -> GeneticPipeline a b m r''
-(=><=) = join bindM3
+(>=<) = join bindM3
   where
     bindM3 f m1 m2 m3 = do
         v1 <- m1
         v2 <- m2
         v3 <- m3
         f v1 v2 v3
+
+(>>=<<) :: MP.MonadParallel m
+    => GeneticPipeline a b m r
+    -> GeneticPipeline a b m r'
+    -> GeneticJoin b m r''
+    -> GeneticPipeline a b m r''
+(>>=<<) = join MP.bindM3

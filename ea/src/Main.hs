@@ -4,18 +4,18 @@ import Control.Monad ((>=>), replicateM_)
 import Data.Maybe (fromJust)
 
 import Control.Monad.Trans.Class (lift)
-import qualified Data.Vector as V (fromList, unsafeFreeze)
-import qualified Data.Vector.Mutable as MV (IOVector, replicate)
+import qualified Data.Vector as V (Vector, fromList, replicate)
+--import qualified Data.Vector.Mutable as MV (IOVector, replicate)
 
 import GeneticPipeline.Crossover
 import GeneticPipeline.GeneticPipeline
 import GeneticPipeline.Join
 import GeneticPipeline.Selection
 
-dummyPopulation :: IO (Population (MV.IOVector Int, Double))
-dummyPopulation = do
-    mvList <- mapM (\x -> MV.replicate 5 x) [0..9]
-    return $ V.fromList $ zip mvList [10..19]
+dummyPopulation :: Population (V.Vector Int, Double)
+dummyPopulation =
+    let vList = map (V.replicate 5) [0..9 :: Int]
+    in V.fromList $ zip vList [10..19]
 
 main :: IO ()
 main = runGeneticPipeline pipeline'
@@ -28,12 +28,12 @@ main = runGeneticPipeline pipeline'
         --    yieldGP (mv1 :: MV.IOVector Int)
         --    yieldGP (mv2 :: MV.IOVector Int)
         =>>= pointCrossover
-    pipeline' = (pipeline =><= tournament $ priorityJoin 0.8) =>>= consumer
+    pipeline' = (pipeline >>=<< tournament $ priorityJoin 0.8) =>>= consumer
 
-    tournament = lift dummyPopulation >>= tournamentSelection 3
-    consumer = replicateM_ 10 $ awaitGP >>= lift . printMVector . fromJust
+    tournament = tournamentSelection 3 dummyPopulation
+    consumer = replicateM_ 10 $ awaitGP >>= lift . print . fromJust
 
-    printMVector = V.unsafeFreeze >=> print
+    --printMVector = V.unsafeFreeze >=> print
     --debug = do
     --    Just x <- awaitGP
     --    lift $ putStr "Selected: "

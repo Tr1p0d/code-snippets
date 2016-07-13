@@ -1,21 +1,22 @@
 module GeneticPipeline.Crossover where
 
 import Control.Monad (forever)
+import Data.Maybe (fromJust)
 
 import Control.Monad.Random (getRandomR)
 import Control.Monad.Trans.Class (lift)
-import qualified Data.Vector.Mutable as MV
-    (IOVector, length, unsafeWrite, unsafeRead)
+import Data.Vector as V (Vector, thaw, unsafeFreeze)
+import Data.Vector.Mutable as MV (length, unsafeRead, unsafeWrite)
 
 import GeneticPipeline.GeneticPipeline
 
-pointCrossover :: GeneticPipeline (MV.IOVector a) (MV.IOVector a) IO ()
+pointCrossover :: GeneticPipeline (V.Vector a) (V.Vector a) IO ()
 pointCrossover = forever $ do
-    Just v1 <- awaitGP
-    Just v2 <- awaitGP
+    v1 <- awaitGP >>= lift . thaw . fromJust
+    v2 <- awaitGP >>= lift . thaw . fromJust
     lift $ singlePointCrossover v1 v2
-    yieldGP v1
-    yieldGP v2
+    lift (unsafeFreeze v1) >>= yieldGP
+    lift (unsafeFreeze v2) >>= yieldGP
   where
     singlePointCrossover v1 v2 = do
         crossoverPoint <- getRandomR (0, MV.length v1 - 1)

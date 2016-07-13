@@ -47,10 +47,11 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
-    GeneticPipeline.GeneticPipeline
-    GeneticPipeline.Selection
     GeneticPipeline.Crossover
+    GeneticPipeline.GeneticPipeline
     GeneticPipeline.Join
+    GeneticPipeline.Mutation
+    GeneticPipeline.Selection
 
   -- Modules included in this executable, other than Main.
   -- other-modules:
@@ -62,9 +63,10 @@ library
   build-depends:       base >=4.8 && <4.9
                        , vector >=0.11 && <0.12
                        , MonadRandom
-                       , transformers
                        , monad-coroutine
                        , monad-parallel
+                       , random
+                       , transformers
 
   -- Directories containing source files.
   hs-source-dirs:      src
@@ -79,7 +81,11 @@ executable eamain
   main-is:             Main.hs
 
   -- Modules included in this executable, other than Main.
-  -- other-modules:
+  other-modules:
+    GeneticPipeline.GeneticPipeline
+    GeneticPipeline.Selection
+    GeneticPipeline.Crossover
+    GeneticPipeline.Join
 
   -- LANGUAGE extensions used by modules in this package.
   --  other-extensions:
@@ -88,9 +94,10 @@ executable eamain
   build-depends:       base >=4.8 && <4.9
                        , vector >=0.11 && <0.12
                        , MonadRandom
-                       , transformers
                        , monad-coroutine
                        , monad-parallel
+                       , random
+                       , transformers
 
   -- Directories containing source files.
   hs-source-dirs:      src
