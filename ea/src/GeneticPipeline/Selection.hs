@@ -28,5 +28,3 @@ tournamentSelection tSize population = forever $ do
         if fitness > fitness'
         then tournament (i-1) ind'
         else tournament (i-1) ind
-
-
