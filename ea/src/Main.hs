@@ -1,6 +1,6 @@
 module Main where
 
-import Control.Monad (replicateM_)
+import Control.Monad (replicateM_, forever)
 import Data.Maybe (fromJust)
 
 import Control.Monad.Random (getRandomR)
@@ -20,38 +20,34 @@ dummyPopulation =
     let vList = map (V.replicate 5) [0..9 :: Int]
     in V.fromList $ zip vList [10..99]
 
-main :: IO ()
-main = defaultMain
-    [ bgroup "parallelPipe"
-        [ bench "10" $ whnfIO (geneticPipeline 10)
-        , bench "100" $ whnfIO (geneticPipeline 100)
-        , bench "1000" $ whnfIO (geneticPipeline 1000)
-        ]
-    , bgroup "sequentialPipe"
-        [ bench "10" $ whnfIO (geneticPipeline' 10)
-        , bench "100" $ whnfIO (geneticPipeline' 100)
-        , bench "1000" $ whnfIO (geneticPipeline' 1000)
-        ]
-    ]
+--main :: IO ()
+--main = defaultMain
+--    [ bgroup "=>>="
+--        [ bench "100" $ whnfIO (benchRoute (=>>=) 10)
+--        ]
+--    , bgroup "=>="
+--        [ bench "100" $ whnfIO (benchRoute (=>=) 10)
+--        ]
+--    ]
+
+benchRoute f times = runGeneticPipeline $ producer `f` consumer times
+  where
+    producer = forever $ do
+        (lift $ getRandomR (-100, 100::Int)) >>= yieldGP
+
+--main = benchRoute (=>=) 1000000
+main = geneticPipeline 1000000
 
 geneticPipeline :: Int -> IO ()
 geneticPipeline times = runGeneticPipeline pipeline'
   where
     pipeline = do
         tournament
-        =>>= pointCrossover
-        =>>= (pointMutation (getRandomR (-5,5)) 0.2)
-    pipeline' = (pipeline >>=<< tournament $ priorityJoin 0.8) =>>= consumer times
-
-geneticPipeline' :: Int -> IO ()
-geneticPipeline' times = runGeneticPipeline pipeline'
-  where
-    pipeline = do
-        tournament
         =>= pointCrossover
         =>= (pointMutation (getRandomR (-5,5)) 0.2)
-    pipeline' = (pipeline >=< tournament $ priorityJoin 0.8) =>= consumer times
+    --pipeline' = (pipeline >=< tournament $ priorityJoin 0.8) =>= consumer times
+    pipeline' = pipeline =>= consumer times
 
-tournament = tournamentSelection 3 dummyPopulation
---consumer = replicateM_ times $ awaitGP >>= lift . print . fromJust
+    tournament = tournamentSelection 3 dummyPopulation
+
 consumer times = replicateM_ times $ awaitGP >> return ()
