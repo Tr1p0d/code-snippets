@@ -1,6 +1,8 @@
 {-# LANGUAGE RankNTypes #-}
 module GeneticPipeline.GeneticPipeline where
 
+import Data.Maybe (fromJust)
+
 import Control.Monad.Coroutine
 import Control.Monad.Coroutine.SuspensionFunctors (Yield(Yield), Await(Await))
 import qualified Control.Monad.Parallel as MP (MonadParallel(bindM2), bindM3)
@@ -29,6 +31,9 @@ yieldGP = suspend . InR . flip Yield (return ())
 
 awaitGP :: Monad m => GeneticPipeline a b m (Maybe a)
 awaitGP = suspend $ InL $ Await return
+
+unsafeAwaitGP :: Monad m => GeneticPipeline a b m a
+unsafeAwaitGP = fromJust <$> awaitGP
 
 runGeneticPipeline :: Monad m => GeneticPipeline Void Void m r -> m r
 runGeneticPipeline = runCoroutine . mapSuspension (let a=a in a)
@@ -65,6 +70,13 @@ route bind t1 t2 = Coroutine (bind proceed (resume t1) (resume t2))
         va <- ma
         vb <- mb
         f va vb
+
+(=<=)
+    :: MP.MonadParallel m
+    => GeneticPipeline b c m ()
+    -> GeneticPipeline a b m ()
+    -> GeneticPipeline a c m ()
+(=<=) = flip (=>=)
 
 (=>>=)
     :: MP.MonadParallel m

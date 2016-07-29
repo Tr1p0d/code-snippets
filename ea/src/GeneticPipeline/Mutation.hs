@@ -1,23 +1,21 @@
 module GeneticPipeline.Mutation where
 
 import Control.Monad (forever)
-import Data.Maybe (fromJust)
 
 import Control.Monad.Random (getRandomR)
 import Control.Monad.Trans.Class (lift)
-import Data.Vector as V (Vector, thaw, unsafeFreeze)
-import Data.Vector.Mutable as MV (length, unsafeModify)
+import Data.Vector.Mutable as MV (IOVector, length, unsafeModify)
 
 import GeneticPipeline.GeneticPipeline
 
 pointMutation
     :: IO a
     -> Double
-    -> GeneticPipeline (V.Vector a) (V.Vector a) IO ()
+    -> GeneticPipeline (MV.IOVector a) (MV.IOVector a) IO ()
 pointMutation rElemAction ratio = forever $ do
-    v <- awaitGP >>= lift . thaw . fromJust
+    Just v <- awaitGP
     lift $ singlePointMutate v
-    lift (unsafeFreeze v) >>= yieldGP
+    yieldGP v
   where
     singlePointMutate v = do
         mutationPoint <- getRandomR (0, MV.length v - 1)

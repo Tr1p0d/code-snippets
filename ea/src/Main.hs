@@ -1,53 +1,40 @@
 module Main where
 
-import Control.Monad (replicateM_, forever)
+import Control.Monad (replicateM_)
 import Data.Maybe (fromJust)
 
 import Control.Monad.Random (getRandomR)
 import Control.Monad.Trans.Class (lift)
-import qualified Data.Vector as V (Vector, fromList, replicate)
-
-import Criterion.Main
+import qualified Data.Vector as V (fromList, unsafeFreeze)
+import Data.Vector.Mutable as MV (IOVector, replicate)
+import Data.Void (Void)
 
 import GeneticPipeline.Crossover
 import GeneticPipeline.GeneticPipeline
-import GeneticPipeline.Join
 import GeneticPipeline.Mutation
 import GeneticPipeline.Selection
 
-dummyPopulation :: Population (V.Vector Int, Double)
-dummyPopulation =
-    let vList = map (V.replicate 5) [0..9 :: Int]
-    in V.fromList $ zip vList [10..99]
 
---main :: IO ()
---main = defaultMain
---    [ bgroup "=>>="
---        [ bench "100" $ whnfIO (benchRoute (=>>=) 10)
---        ]
---    , bgroup "=>="
---        [ bench "100" $ whnfIO (benchRoute (=>=) 10)
---        ]
---    ]
-
-benchRoute f times = runGeneticPipeline $ producer `f` consumer times
-  where
-    producer = forever $ do
-        (lift $ getRandomR (-100, 100::Int)) >>= yieldGP
-
---main = benchRoute (=>=) 1000000
-main = geneticPipeline 1000000
+main :: IO ()
+main = geneticPipeline 30
 
 geneticPipeline :: Int -> IO ()
-geneticPipeline times = runGeneticPipeline pipeline'
+geneticPipeline times = runGeneticPipeline pipeline
   where
     pipeline = do
         tournament
         =>= pointCrossover
         =>= (pointMutation (getRandomR (-5,5)) 0.2)
-    --pipeline' = (pipeline >=< tournament $ priorityJoin 0.8) =>= consumer times
-    pipeline' = pipeline =>= consumer times
+        =>= consumer times
 
-    tournament = tournamentSelection 3 dummyPopulation
+    tournament = lift dummyPopulation >>= tournamentSelection' 3
 
-consumer times = replicateM_ times $ awaitGP >> return ()
+consumer :: (Show a) => Int -> GeneticPipeline (MV.IOVector a) Void IO ()
+consumer times = replicateM_ times $ awaitGP
+    >>= lift . V.unsafeFreeze . fromJust
+    >>= lift . print
+
+dummyPopulation :: IO (Population (MV.IOVector Int, Double))
+dummyPopulation = do
+     vList <- mapM (MV.replicate 5) [0..1 :: Int]
+     return $ V.fromList (zip vList [10..])
