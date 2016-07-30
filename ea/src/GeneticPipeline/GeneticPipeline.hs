@@ -61,9 +61,9 @@ route bind t1 t2 = Coroutine (bind proceed (resume t1) (resume t2))
 
 (=>=)
     :: MP.MonadParallel m
-    => GeneticPipeline a b m ()
-    -> GeneticPipeline b c m ()
-    -> GeneticPipeline a c m ()
+    => GeneticPipeline a b m r
+    -> GeneticPipeline b c m r'
+    -> GeneticPipeline a c m r'
 (=>=) = route bindM2
   where
     bindM2 f ma mb= do
@@ -73,16 +73,16 @@ route bind t1 t2 = Coroutine (bind proceed (resume t1) (resume t2))
 
 (=<=)
     :: MP.MonadParallel m
-    => GeneticPipeline b c m ()
-    -> GeneticPipeline a b m ()
-    -> GeneticPipeline a c m ()
+    => GeneticPipeline b c m r'
+    -> GeneticPipeline a b m r
+    -> GeneticPipeline a c m r'
 (=<=) = flip (=>=)
 
 (=>>=)
     :: MP.MonadParallel m
-    => GeneticPipeline a b m ()
-    -> GeneticPipeline b c m ()
-    -> GeneticPipeline a c m ()
+    => GeneticPipeline a b m r
+    -> GeneticPipeline b c m r'
+    -> GeneticPipeline a c m r'
 (=>>=) = route MP.bindM2
 
 -- Join
