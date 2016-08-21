@@ -95,14 +95,16 @@ executable eamain
 
   -- LANGUAGE extensions used by modules in this package.
   --  other-extensions:
-  build-depends:       base >=4.8 && <5
-                       , criterion
-                       , vector >=0.11 && <0.12
-                       , MonadRandom
-                       , monad-coroutine
-                       , monad-parallel
-                       , transformers
-                       , lens
+  build-depends:
+    base >=4.8 && <5
+    , criterion
+    , containers
+    , vector >=0.11 && <0.12
+    , MonadRandom
+    , monad-coroutine
+    , monad-parallel
+    , transformers
+    , lens
 
   -- Other library packages from which modules are imported.
   ghc-options:         -Wall

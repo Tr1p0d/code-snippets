@@ -3,6 +3,8 @@ module GeneticPipeline.GeneticPipeline where
 
 import Data.Maybe (fromJust)
 
+import qualified Data.Map.Lazy as M (Map)
+
 import Control.Monad.Coroutine
 import Control.Monad.Coroutine.SuspensionFunctors (Yield(Yield), Await(Await))
 import qualified Control.Monad.Parallel as MP (MonadParallel(bindM2), bindM3)
@@ -24,7 +26,9 @@ type Selection b = GeneticPipeline Void b IO ()
 
 type GeneticOp a b = GeneticPipeline a b IO ()
 
-type Population a = V.Vector a
+type Population = V.Vector
+
+type EvaluatedPopulation a = M.Map Double a
 
 yieldGP :: Monad m => b -> GeneticPipeline a b m ()
 yieldGP = suspend . InR . flip Yield (return ())

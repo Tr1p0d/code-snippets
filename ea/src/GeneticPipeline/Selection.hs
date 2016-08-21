@@ -13,7 +13,7 @@ type TournamentSize = Int
 
 tournamentSelection
     :: TournamentSize
-    -> Population (a, Double)
+    -> EvaluatedPopulation a
     -> Selection a
 tournamentSelection tSize population = forever $ do
     lift (getRandomIndividual >>= tournament (tSize - 1))
