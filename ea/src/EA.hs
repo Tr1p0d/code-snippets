@@ -4,14 +4,15 @@
 module EA
   where
 
-import Control.Monad (when)
 import Data.Word (Word32)
 
-import Control.Lens ((%~), (^.), makeLenses)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State.Lazy (StateT, get, modify)
-import Data.Vector as V (replicateM)
+import qualified Data.Map as M (fromList)
+import Data.Vector as V (replicateM, toList)
 import Data.Void (Void)
+
+import Control.Lens ((%~), (^.), makeLenses)
 
 import GeneticPipeline.GeneticPipeline
 
@@ -19,7 +20,7 @@ data EvolutionaryParams a = EvolutionaryParams
     { populationSize :: Word32
     , randomIndividual :: IO a
     , fitness :: a -> IO Double
-    , reproduction :: Population (a, Double) -> GeneticPipeline Void a IO ()
+    , reproduction :: EvaluatedPopulation a -> GeneticPipeline Void a IO ()
     , terminationCondition :: TerminationCondition a
     }
 
@@ -43,17 +44,24 @@ ea params@EvolutionaryParams{..} = lift mkInitPop >>= eaWithPop params
 
 eaWithPop :: EvolutionaryParams a -> Population a -> EvolutionRun a ()
 eaWithPop params@EvolutionaryParams{..} pop = do
-    evaluated <- lift $ mapM (\a -> (a,) <$> fitness a) pop
-    terminateP
-    nPop <- lift $ runGeneticPipeline (pipeline' evaluated)
-    incGeneration >> eaWithPop params nPop
+    evaluated' <- lift $ mapM (\a -> (,a) <$> fitness a) (toList pop)
+    let evaluated = M.fromList evaluated'
+    terminate <- terminateP
+    if terminate
+    then return ()
+    else do
+        printProgress
+        nPop <- lift $ runGeneticPipeline (pipeline' evaluated)
+        incGeneration >> eaWithPop params nPop
   where
-    incGeneration = do
-        modify $ generation %~ (+1)
+    incGeneration = modify $ generation %~ (+1)
     pipeline' a = reproduction a =>= vectorConsumer populationSize
     terminateP = do
         s <- get
-        when ((s ^. generation) == maxGeneration terminationCondition) $ return ()
+        return $ (s ^. generation) == maxGeneration terminationCondition
+    printProgress = do
+        s <- get
+        lift $ print $ _generation s
 
 vectorConsumer :: Word32 -> GeneticPipeline a Void IO (Population a)
 vectorConsumer times = V.replicateM (fromIntegral times) unsafeAwaitGP
