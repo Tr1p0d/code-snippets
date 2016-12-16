@@ -16,6 +16,8 @@ body _ = error "Not so easy ha?!"
 
 expr1 = Lam "x" (Plus `App` Lit 1 `App` Lit 2)
 
+expr2 = Lam "y" expr1
+
 data SKI
     = S SKI SKI
     | K SKI
