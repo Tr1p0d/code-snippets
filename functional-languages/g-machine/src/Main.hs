@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 module Main
     (main)
@@ -29,11 +30,13 @@ data Node
     | NGlobal Int GMCode
   deriving (Show)
 
+type Globals = M.Map Name Addr
+
 data GMState = GMState
     { _gCode :: GMCode
     , _gStack :: [Addr]
     , _gHeap :: Heap Node
-    , _gGlobals :: M.Map Name Addr
+    , _gGlobals :: Globals
     }
   deriving (Show)
 makeLenses ''GMState
@@ -60,5 +63,73 @@ dispatch Mkap state@(GMState _ (a1:a2:as) heap _) =
     let (nAddress, nHeap) = hAlloc heap (NApp a1 a2)
     in state { _gStack = (nAddress:as), _gHeap = nHeap }
 
+dispatch (Slide n) state@GMState{..} =
+    let (a:as) = _gStack
+    in state & gStack .~ (a:drop n as)
+
+dispatch (Push n) _ = error "Not implemented"
+
+dispatch Unwind state = unwind state
+
+unwind :: GMState -> GMState
+unwind state@GMState{..} = case hLookup _gHeap (head _gStack) of
+    NNode n -> state
+    NApp a1 a2 -> state & gStack %~ ((a1:) . (a2:)) & gCode .~ [Unwind]
+    NGlobal nParams c ->
+        if nParams < length (tail _gStack)
+        then error "Not enough arguments to unwind supercombinator"
+        else state & gCode .~ c
+
+compile :: CoreProgram -> GMState
+compile program = GMState initialCode [] heap globals
+  where
+    (heap, globals) = buildInitialHeap program
+    initialCode = [Pushglobal "main", Unwind]
+
+buildInitialHeap :: CoreProgram -> (Heap Node, Globals)
+buildInitialHeap program = foldl alloc (hInitial, M.empty) compiled
+  where
+    compiled = map compileSc (program ++ preludes)
+    alloc (heap, globals) (name, nArgs, code) = (newHeap, newGlobals)
+      where
+        (a, newHeap) = hAlloc heap (NGlobal nArgs code)
+        newGlobals = M.insert name a globals
+
+type GCompiledSC = (Name, Int, GMCode)
+
+compileSc :: CoreScDefn -> GCompiledSC
+compileSc (name, args, expr) =
+    (name, length args, compileR expr (zip args [0..]))
+
+compileR :: CoreExpr -> [(Name, Int)] -> GMCode
+compileR e env = compileC env e ++ [Slide (length env + 1), Unwind]
+
+compileC :: [(Name, Int)] -> CoreExpr -> GMCode
+compileC env (EVar name)
+    | elem name (
+
 main :: IO ()
 main = return ()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
