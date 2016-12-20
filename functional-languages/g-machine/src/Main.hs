@@ -38,8 +38,16 @@ data GMState = GMState
     , _gHeap :: Heap Node
     , _gGlobals :: Globals
     }
-  deriving (Show)
 makeLenses ''GMState
+
+instance Show GMState where
+    show GMState{..} = code +\+ stack +\+ heap +\+ globals
+      where
+        s1 +\+ s2 = s1 ++ "\n\n" ++ s2
+        code = show _gCode
+        stack = show _gStack
+        heap = show _gHeap
+        globals = show _gGlobals
 
 evalG :: GMState -> [GMState]
 evalG state
@@ -67,14 +75,18 @@ dispatch (Slide n) state@GMState{..} =
     let (a:as) = _gStack
     in state & gStack .~ (a:drop n as)
 
-dispatch (Push n) _ = error "Not implemented"
+dispatch (Push n) state@GMState{..} =
+    let getArg (NApp a1 a2) = a2
+        getArg n = error $ "Not an application node!" ++ show n
+        a = getArg (hLookup _gHeap (_gStack !! (n + 1)))
+    in state & gStack %~ (a:)
 
 dispatch Unwind state = unwind state
 
 unwind :: GMState -> GMState
 unwind state@GMState{..} = case hLookup _gHeap (head _gStack) of
     NNode n -> state
-    NApp a1 a2 -> state & gStack %~ ((a1:) . (a2:)) & gCode .~ [Unwind]
+    NApp a1 a2 -> state & gStack %~ (a1:) & gCode .~ [Unwind]
     NGlobal nParams c ->
         if nParams < length (tail _gStack)
         then error "Not enough arguments to unwind supercombinator"
@@ -106,30 +118,24 @@ compileR e env = compileC env e ++ [Slide (length env + 1), Unwind]
 
 compileC :: [(Name, Int)] -> CoreExpr -> GMCode
 compileC env (EVar name)
-    | elem name (
+    | elem name domain = [Push n]
+    | otherwise = [Pushglobal name]
+  where
+    n = (M.fromAscList env) M.! name
+    domain = M.keys $ M.fromAscList env
+compileC env expr = case expr of
+    ENum n -> [Pushint n]
+    EAp e1 e2 -> compileC env e2 ++ compileC (argOffset 1 env) e1 ++ [Mkap]
+  where
+    argOffset n env' = [(v, n+m) | (v,m) <- env']
 
 main :: IO ()
-main = return ()
+main =
+    let (a:_) = reverse $ evalG $ compile testProgram1
+    in print (hLookup (a ^. gHeap) (head $ a ^. gStack))
 
+testProgram1 :: CoreProgram
+testProgram1 = [("main", [], EVar "S" `EAp` (EVar "K") `EAp` (EVar "K") `EAp` (ENum 3))]
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+testProgram2 :: CoreProgram
+testProgram2 = [("main", [], EVar "K" `EAp` ENum 4 `EAp` ENum 3)]
