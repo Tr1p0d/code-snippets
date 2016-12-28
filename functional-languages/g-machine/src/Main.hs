@@ -18,7 +18,8 @@ data Instruction
     | Pushint Int
     | Push Int
     | Mkap
-    | Slide Int
+    | Pop Int
+    | Update Int
   deriving (Eq, Show)
 type GMCode = [Instruction]
 
@@ -28,6 +29,7 @@ data Node
     = NNode Int
     | NApp Addr Addr
     | NGlobal Int GMCode
+    | NInd Addr
   deriving (Show)
 
 type Globals = M.Map Name Addr
@@ -71,26 +73,32 @@ dispatch Mkap state@(GMState _ (a1:a2:as) heap _) =
     let (nAddress, nHeap) = hAlloc heap (NApp a1 a2)
     in state { _gStack = (nAddress:as), _gHeap = nHeap }
 
-dispatch (Slide n) state@GMState{..} =
-    let (a:as) = _gStack
-    in state & gStack .~ (a:drop n as)
+dispatch (Pop n) state = state & gStack %~ (drop n)
 
-dispatch (Push n) state@GMState{..} =
-    let getArg (NApp a1 a2) = a2
-        getArg n = error $ "Not an application node!" ++ show n
-        a = getArg (hLookup _gHeap (_gStack !! (n + 1)))
-    in state & gStack %~ (a:)
+dispatch (Push n) state@GMState{..} = state & gStack %~ (_gStack !! (n + 1):)
+
+dispatch (Update n) state@GMState{..} =
+    let indNode = NInd $ head $ state ^. gStack
+        (Just atAddr) = state ^? gStack.ix n
+    in state & gHeap %~ hSetAt atAddr indNode
 
 dispatch Unwind state = unwind state
 
 unwind :: GMState -> GMState
 unwind state@GMState{..} = case hLookup _gHeap (head _gStack) of
+    NInd a -> state & gStack.ix 0 .~ a  & gCode .~ [Unwind]
     NNode n -> state
     NApp a1 a2 -> state & gStack %~ (a1:) & gCode .~ [Unwind]
     NGlobal nParams c ->
-        if nParams < length (tail _gStack)
-        then error "Not enough arguments to unwind supercombinator"
-        else state & gCode .~ c
+        if nParams > length (tail _gStack)
+        then error $ "Not enough arguments to unwind"
+        else state & gCode .~ c & gStack %~ rearrangeStack
+      where
+        rearrangeStack stack = take nParams newStack ++ drop nParams stack
+          where
+            getArg (NApp a1 a2) = a2
+            getArg n = error $ "Not an application node!" ++ show n
+            newStack = map (getArg . hLookup _gHeap) (tail stack)
 
 compile :: CoreProgram -> GMState
 compile program = GMState initialCode [] heap globals
@@ -114,7 +122,9 @@ compileSc (name, args, expr) =
     (name, length args, compileR expr (zip args [0..]))
 
 compileR :: CoreExpr -> [(Name, Int)] -> GMCode
-compileR e env = compileC env e ++ [Slide (length env + 1), Unwind]
+compileR e env =
+    let d = length env + 1
+    in compileC env e ++ [Update d, Pop d, Unwind]
 
 compileC :: [(Name, Int)] -> CoreExpr -> GMCode
 compileC env (EVar name)
@@ -139,3 +149,8 @@ testProgram1 = [("main", [], EVar "S" `EAp` (EVar "K") `EAp` (EVar "K") `EAp` (E
 
 testProgram2 :: CoreProgram
 testProgram2 = [("main", [], EVar "K" `EAp` ENum 4 `EAp` ENum 3)]
+
+testProgram3 :: CoreProgram
+testProgram3 =
+    [ ("id", [], EVar "S" `EAp` EVar "K" `EAp` EVar "K")
+    , ("main", [], EVar "twice" `EAp` EVar "id" `EAp` ENum 3)]

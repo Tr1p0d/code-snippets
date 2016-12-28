@@ -17,3 +17,6 @@ hLookup (Heap (_, _, m)) a = m M.! a
 
 hInitial :: Heap a
 hInitial = Heap (0, [0..], M.empty)
+
+hSetAt :: Int -> a -> Heap a -> Heap a
+hSetAt index addr (Heap (c, f, m)) = Heap (c, f, M.insert index addr m)
