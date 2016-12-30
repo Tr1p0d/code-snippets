@@ -20,6 +20,8 @@ data Instruction
     | Mkap
     | Pop Int
     | Update Int
+    | Alloc Int
+    | Slide Int
   deriving (Eq, Show)
 type GMCode = [Instruction]
 
@@ -65,6 +67,8 @@ dispatch :: Instruction -> GMState -> GMState
 dispatch (Pushglobal n) state@GMState{..} =
     let address = _gGlobals M.! n in state & gStack %~ (address:)
 
+dispatch (Slide n) state = state & gStack %~ (drop n)
+
 dispatch (Pushint n) state@GMState{..} =
     let (nAddress, nHeap) = hAlloc _gHeap (NNode n)
     in state & gStack %~ (nAddress:) & gHeap .~ nHeap
@@ -83,6 +87,19 @@ dispatch (Update n) state@GMState{..} =
     in state & gHeap %~ hSetAt atAddr indNode
 
 dispatch Unwind state = unwind state
+
+dispatch (Alloc n) state@GMState{..} =
+    let (newHeap, addrs) = allocNodes n _gHeap
+    in state & gHeap .~ newHeap & gStack %~ (addrs++)
+  where
+    allocNodes 0 heap = (heap, [])
+    allocNodes n heap =
+        let (addr, heap') = hAlloc heap (NInd hNull)
+            (heap'', addrs) = allocNodes (n-1) heap'
+        in (heap'', addr:addrs)
+
+hNull :: Addr
+hNull = error $ "invalid heap address"
 
 unwind :: GMState -> GMState
 unwind state@GMState{..} = case hLookup _gHeap (head _gStack) of
@@ -126,18 +143,39 @@ compileR e env =
     let d = length env + 1
     in compileC env e ++ [Update d, Pop d, Unwind]
 
-compileC :: [(Name, Int)] -> CoreExpr -> GMCode
+type GMCompiler = [(Name, Int)] -> CoreExpr -> GMCode
+
+argOffset n env' = [(v, n+m) | (v,m) <- env']
+
+compileC :: GMCompiler
 compileC env (EVar name)
     | elem name domain = [Push n]
     | otherwise = [Pushglobal name]
   where
     n = (M.fromAscList env) M.! name
     domain = M.keys $ M.fromAscList env
+compileC env (ELet recursive defs e)
+    | recursive = compileLetRec compileC defs env e
+    | otherwise = compileLet compileC defs env e
 compileC env expr = case expr of
     ENum n -> [Pushint n]
     EAp e1 e2 -> compileC env e2 ++ compileC (argOffset 1 env) e1 ++ [Mkap]
+
+compileLet :: GMCompiler -> [(Name, CoreExpr)] -> GMCompiler
+compileLet compile' defs env expr =
+    compileLet' defs env
+    ++ compile' (compileArgs defs env) expr
+    ++ [Slide (length defs)]
   where
-    argOffset n env' = [(v, n+m) | (v,m) <- env']
+    compileLet' [] env = []
+    compileLet' ((name,expr):args) env =
+        compileC env expr ++ compileLet' args (argOffset 1 env)
+    compileArgs defs env =
+        let n = length defs
+        in  zip (map fst defs) [n-1, n-2 .. 0] ++ argOffset n env
+
+compileLetRec :: GMCompiler -> [(Name, CoreExpr)] -> GMCompiler
+compileLetRec = undefined
 
 main :: IO ()
 main =
@@ -145,7 +183,8 @@ main =
     in print (hLookup (a ^. gHeap) (head $ a ^. gStack))
 
 testProgram1 :: CoreProgram
-testProgram1 = [("main", [], EVar "S" `EAp` (EVar "K") `EAp` (EVar "K") `EAp` (ENum 3))]
+testProgram1 =
+    [("main", [], EVar "S" `EAp` (EVar "K") `EAp` (EVar "K") `EAp` (ENum 3))]
 
 testProgram2 :: CoreProgram
 testProgram2 = [("main", [], EVar "K" `EAp` ENum 4 `EAp` ENum 3)]
@@ -154,3 +193,9 @@ testProgram3 :: CoreProgram
 testProgram3 =
     [ ("id", [], EVar "S" `EAp` EVar "K" `EAp` EVar "K")
     , ("main", [], EVar "twice" `EAp` EVar "id" `EAp` ENum 3)]
+
+testProgram4 :: CoreProgram
+testProgram4 =
+    [ ("three", [], ELet False [("x", ENum 4)] (EVar "x"))
+    , ("main", [], EVar "three")
+    ]
