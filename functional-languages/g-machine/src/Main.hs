@@ -65,7 +65,7 @@ instance Show GMState where
 
 evalG :: GMState -> [GMState]
 evalG state
-    | isFinal = []
+    | isFinal = [state]
     | otherwise = state : (evalG $ gStep state)
   where
     isFinal = null (state ^. gCode)
@@ -154,7 +154,7 @@ isNumberNode _ = False
 
 
 hNull :: Addr
-hNull = error $ "invalid heap address"
+hNull = -1
 
 unwind :: GMState -> GMState
 unwind state@GMState{..} = case hLookup _gHeap (head _gStack) of
@@ -285,5 +285,14 @@ testProgram4 =
 
 testProgram5 :: CoreProgram
 testProgram5 =
+    [ ("three", [], ELet True
+        [ ("x", ENum 4)
+        , ("y", EVar "x")
+        ] (EVar "x"))
+    , ("main", [], EVar "three")
+    ]
+
+testProgram6 :: CoreProgram
+testProgram6 =
     [ ("main", [], EVar "+" `EAp` ENum 1 `EAp` ENum 1)
     ]
