@@ -7,21 +7,27 @@ module Main
 
 import qualified Data.Map.Strict as M
 import Control.Lens
+import Control.Lens.Cons
 
 import Core
 import Heap
 
+import Debug.Trace
 
 data Instruction
-    = Unwind
-    | Pushglobal Name
-    | Pushint Int
-    | Push Int
+    = Add
+    | Alloc Int
+    | Cond GMCode GMCode
+    | Eq
+    | Eval
     | Mkap
     | Pop Int
-    | Update Int
-    | Alloc Int
+    | Push Int
+    | Pushglobal Name
+    | Pushint Int
     | Slide Int
+    | Unwind
+    | Update Int
   deriving (Eq, Show)
 type GMCode = [Instruction]
 
@@ -36,22 +42,26 @@ data Node
 
 type Globals = M.Map Name Addr
 
+type GMDump = [(GMCode, [Addr])]
+
 data GMState = GMState
     { _gCode :: GMCode
     , _gStack :: [Addr]
+    , _gDump :: GMDump
     , _gHeap :: Heap Node
     , _gGlobals :: Globals
     }
 makeLenses ''GMState
 
 instance Show GMState where
-    show GMState{..} = code +\+ stack +\+ heap +\+ globals
+    show GMState{..} = code +\+ stack +\+ dump +\+ heap +\+ globals
       where
         s1 +\+ s2 = s1 ++ "\n\n" ++ s2
         code = show _gCode
         stack = show _gStack
         heap = show _gHeap
         globals = show _gGlobals
+        dump = show _gDump
 
 evalG :: GMState -> [GMState]
 evalG state
@@ -61,7 +71,7 @@ evalG state
     isFinal = null (state ^. gCode)
 
 gStep :: GMState -> GMState
-gStep state@(GMState (i:is) _ _ _) = dispatch i (state & gCode .~ is)
+gStep state@(GMState (i:is) _ _ _ _) = dispatch i (state & gCode .~ is)
 
 dispatch :: Instruction -> GMState -> GMState
 dispatch (Pushglobal n) state@GMState{..} =
@@ -73,18 +83,19 @@ dispatch (Pushint n) state@GMState{..} =
     let (nAddress, nHeap) = hAlloc _gHeap (NNode n)
     in state & gStack %~ (nAddress:) & gHeap .~ nHeap
 
-dispatch Mkap state@(GMState _ (a1:a2:as) heap _) =
+dispatch Mkap state@(GMState _ (a1:a2:as) _ heap _) =
     let (nAddress, nHeap) = hAlloc heap (NApp a1 a2)
     in state { _gStack = (nAddress:as), _gHeap = nHeap }
 
 dispatch (Pop n) state = state & gStack %~ (drop n)
 
-dispatch (Push n) state@GMState{..} = state & gStack %~ (_gStack !! (n + 1):)
+dispatch (Push n) state@GMState{..} = state & gStack %~ (_gStack !! n:)
 
 dispatch (Update n) state@GMState{..} =
     let indNode = NInd $ head $ state ^. gStack
-        (Just atAddr) = state ^? gStack.ix n
-    in state & gHeap %~ hSetAt atAddr indNode
+        newStack = tail _gStack
+        (Just atAddr) = state ^? gStack._tail.ix n
+    in state & gHeap %~ hSetAt atAddr indNode & gStack .~ newStack
 
 dispatch Unwind state = unwind state
 
@@ -98,13 +109,66 @@ dispatch (Alloc n) state@GMState{..} =
             (heap'', addrs) = allocNodes (n-1) heap'
         in (heap'', addr:addrs)
 
+dispatch Eval state@GMState{..} = state
+    & gCode .~ [Unwind]
+    & gStack %~ ((:[]) . head)
+    & gDump %~ ((_gCode, tail _gStack):)
+
+dispatch Add state@GMState{..}
+    | (isNumberNode $ hLookup _gHeap (head _gStack)) &&
+      (isNumberNode $ hLookup _gHeap (head $ tail _gStack)) =
+        let (nAddress, nHeap) = hAlloc _gHeap (NNode (x+y))
+            (NNode x) = hLookup _gHeap (head _gStack)
+            (NNode y) = hLookup _gHeap (head $ tail _gStack)
+        in state & gStack %~ ((nAddress:) . drop 2) & gHeap .~ nHeap
+    | otherwise = error "dyadic operation not applied to numbers"
+
+dispatch Eq state@GMState{..}
+    | (isNumberNode $ hLookup _gHeap (head _gStack)) &&
+      (isNumberNode $ hLookup _gHeap (head $ tail _gStack)) =
+        let (nAddress, nHeap) = hAlloc _gHeap
+                (NNode (mapInteger (x == y)))
+            (NNode x) = hLookup _gHeap (head _gStack)
+            (NNode y) = hLookup _gHeap (head $ tail _gStack)
+        in state & gStack %~ ((nAddress:) . drop 2) & gHeap .~ nHeap
+    | otherwise = error "dyadic operation not applied to numbers"
+  where
+    mapInteger x
+        | x = 1
+        | otherwise = 0
+
+dispatch (Cond i1 i2) state@GMState{..}
+    | isNumberNode $ hLookup _gHeap (head _gStack) =
+        if mapBoolean $ hLookup _gHeap (head _gStack)
+        then state & gCode %~ (i1 ++)
+        else state & gCode %~ (i2 ++)
+    | otherwise = error "condition operation is not a number"
+  where
+    mapBoolean (NNode x)
+        | x == 1 = True
+        | x == 0 = False
+        | otherwise = error "not a boolean"
+
+isNumberNode (NNode _) = True
+isNumberNode _ = False
+
+
 hNull :: Addr
 hNull = error $ "invalid heap address"
 
 unwind :: GMState -> GMState
 unwind state@GMState{..} = case hLookup _gHeap (head _gStack) of
     NInd a -> state & gStack.ix 0 .~ a  & gCode .~ [Unwind]
-    NNode n -> state
+    NNode n -> handleNumberNode
+      where
+        handleNumberNode
+            | null $ state ^. gDump = state
+            | otherwise =
+                let (instrs, stack) = head _gDump
+                in state
+                    & gCode .~ instrs
+                    & gStack._tail .~ stack
+                    & gDump %~ tail
     NApp a1 a2 -> state & gStack %~ (a1:) & gCode .~ [Unwind]
     NGlobal nParams c ->
         if nParams > length (tail _gStack)
@@ -118,14 +182,23 @@ unwind state@GMState{..} = case hLookup _gHeap (head _gStack) of
             newStack = map (getArg . hLookup _gHeap) (tail stack)
 
 compile :: CoreProgram -> GMState
-compile program = GMState initialCode [] heap globals
+compile program = GMState initialCode [] [] heap globals
   where
     (heap, globals) = buildInitialHeap program
-    initialCode = [Pushglobal "main", Unwind]
+    initialCode = [Pushglobal "main", Eval]
 
 buildInitialHeap :: CoreProgram -> (Heap Node, Globals)
-buildInitialHeap program = foldl alloc (hInitial, M.empty) compiled
+buildInitialHeap program = foldl alloc (hInitial, M.empty) (compiled ++ primitives)
   where
+    primitives =
+        [ ("+", 2, [Push 1, Eval, Push 1, Eval, Add, Update 2, Pop 2, Unwind])
+        --, ("-" 2, [Push 1, Eval, Push 1, Eval, Sub, Update 2, Pop 2, Unwind])
+        --, ("*" 2, [Push 1, Eval, Push 1, Eval, Mul, Update 2, Pop 2, Unwind])
+        --, ("/", 2, [Push 1, Eval, Push 1, Eval, Div, Update 2, Pop 2, Unwind])
+        , ("==", 2, [Push 1, Eval, Push 1, Eval, Eq, Update 2, Pop 2, Unwind])
+        , ("if", 3,
+            [Push 0, Eval, Cond [Push 1] [Push 2], Update 3, Pop 3, Unwind])
+        ]
     compiled = map compileSc (program ++ preludes)
     alloc (heap, globals) (name, nArgs, code) = (newHeap, newGlobals)
       where
@@ -140,7 +213,7 @@ compileSc (name, args, expr) =
 
 compileR :: CoreExpr -> [(Name, Int)] -> GMCode
 compileR e env =
-    let d = length env + 1
+    let d = length env
     in compileC env e ++ [Update d, Pop d, Unwind]
 
 type GMCompiler = [(Name, Int)] -> CoreExpr -> GMCode
@@ -149,17 +222,21 @@ argOffset n env' = [(v, n+m) | (v,m) <- env']
 
 compileC :: GMCompiler
 compileC env (EVar name)
-    | elem name domain = [Push n]
+    | name `M.member` asc = [Push n]
     | otherwise = [Pushglobal name]
   where
-    n = (M.fromAscList env) M.! name
-    domain = M.keys $ M.fromAscList env
+    asc = M.fromAscList env
+    n = asc M.! name
 compileC env (ELet recursive defs e)
     | recursive = compileLetRec compileC defs env e
     | otherwise = compileLet compileC defs env e
 compileC env expr = case expr of
     ENum n -> [Pushint n]
     EAp e1 e2 -> compileC env e2 ++ compileC (argOffset 1 env) e1 ++ [Mkap]
+
+compileArgs defs env =
+    let n = length defs
+    in  (zip (map fst defs) [n-1, n-2 .. 0]) ++ argOffset n env
 
 compileLet :: GMCompiler -> [(Name, CoreExpr)] -> GMCompiler
 compileLet compile' defs env expr =
@@ -170,12 +247,18 @@ compileLet compile' defs env expr =
     compileLet' [] env = []
     compileLet' ((name,expr):args) env =
         compileC env expr ++ compileLet' args (argOffset 1 env)
-    compileArgs defs env =
-        let n = length defs
-        in  zip (map fst defs) [n-1, n-2 .. 0] ++ argOffset n env
 
 compileLetRec :: GMCompiler -> [(Name, CoreExpr)] -> GMCompiler
-compileLetRec = undefined
+compileLetRec compile' defs env expr =
+    let n = length defs
+        env' = compileArgs defs env
+    in [Alloc n] ++ compileLetRec' defs env' ++ compile' env' expr ++ [Slide n]
+  where
+    compileLetRec' [] env' = []
+    compileLetRec' ((name, expr'):args) env' =
+        compileC env' expr'
+        ++ [Update (length args)]
+        ++ compileLetRec' args (argOffset 1 env')
 
 main :: IO ()
 main =
@@ -198,4 +281,9 @@ testProgram4 :: CoreProgram
 testProgram4 =
     [ ("three", [], ELet False [("x", ENum 4)] (EVar "x"))
     , ("main", [], EVar "three")
+    ]
+
+testProgram5 :: CoreProgram
+testProgram5 =
+    [ ("main", [], EVar "+" `EAp` ENum 1 `EAp` ENum 1)
     ]
