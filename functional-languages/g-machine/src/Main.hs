@@ -17,15 +17,19 @@ import Debug.Trace
 data Instruction
     = Add
     | Alloc Int
+    | CaseJump [(Int, GMCode)]
     | Cond GMCode GMCode
     | Eq
     | Eval
     | Mkap
+    | Pack Int Int
     | Pop Int
+    | Print
     | Push Int
     | Pushglobal Name
     | Pushint Int
     | Slide Int
+    | Split Int
     | Unwind
     | Update Int
   deriving (Eq, Show)
@@ -38,14 +42,18 @@ data Node
     | NApp Addr Addr
     | NGlobal Int GMCode
     | NInd Addr
+    | NConstr Int [Addr]
   deriving (Show)
 
 type Globals = M.Map Name Addr
 
 type GMDump = [(GMCode, [Addr])]
 
+type GMOutput = String
+
 data GMState = GMState
-    { _gCode :: GMCode
+    { _gOutput :: GMOutput
+    , _gCode :: GMCode
     , _gStack :: [Addr]
     , _gDump :: GMDump
     , _gHeap :: Heap Node
@@ -54,7 +62,12 @@ data GMState = GMState
 makeLenses ''GMState
 
 instance Show GMState where
-    show GMState{..} = code +\+ stack +\+ dump +\+ heap +\+ globals
+    show GMState{..} = "\n" ++ output
+        +\+ code
+        +\+ stack
+        +\+ dump
+        +\+ heap
+        +\+ globals
       where
         s1 +\+ s2 = s1 ++ "\n\n" ++ s2
         code = show _gCode
@@ -62,6 +75,7 @@ instance Show GMState where
         heap = show _gHeap
         globals = show _gGlobals
         dump = show _gDump
+        output = show _gOutput
 
 evalG :: GMState -> [GMState]
 evalG state
@@ -71,7 +85,7 @@ evalG state
     isFinal = null (state ^. gCode)
 
 gStep :: GMState -> GMState
-gStep state@(GMState (i:is) _ _ _ _) = dispatch i (state & gCode .~ is)
+gStep state@(GMState _ (i:is) _ _ _ _) = dispatch i (state & gCode .~ is)
 
 dispatch :: Instruction -> GMState -> GMState
 dispatch (Pushglobal n) state@GMState{..} =
@@ -83,7 +97,7 @@ dispatch (Pushint n) state@GMState{..} =
     let (nAddress, nHeap) = hAlloc _gHeap (NNode n)
     in state & gStack %~ (nAddress:) & gHeap .~ nHeap
 
-dispatch Mkap state@(GMState _ (a1:a2:as) _ heap _) =
+dispatch Mkap state@(GMState _ _ (a1:a2:as) _ heap _) =
     let (nAddress, nHeap) = hAlloc heap (NApp a1 a2)
     in state { _gStack = (nAddress:as), _gHeap = nHeap }
 
@@ -149,9 +163,33 @@ dispatch (Cond i1 i2) state@GMState{..}
         | x == 0 = False
         | otherwise = error "not a boolean"
 
+dispatch (Pack t n) state@GMState{..} =
+    let (newAddr, newHeap) = hAlloc _gHeap (NConstr t (take n _gStack))
+    in state & gStack %~ ((newAddr:) . drop n) & gHeap .~ newHeap
+
+dispatch (CaseJump tagAssoc) state@GMState{..} =
+    case hLookup _gHeap (head _gStack) of
+        NConstr t _ -> state
+            & gCode %~ ((tagMap M.! t) ++)
+        _ -> error "cannot multiway jump on non-constructor"
+  where
+    tagMap = M.fromAscList tagAssoc
+
+dispatch (Split n) state@GMState{..} = case hLookup _gHeap (head _gStack) of
+    NConstr _ addrs -> state & gStack %~ ((addrs ++) . tail)
+    _ -> error "cannot split on non-constructor"
+
+dispatch Print state@GMState{..} = case hLookup _gHeap (head _gStack) of
+    NNode n -> state & gOutput %~ (++ number n)
+    NConstr tag addrs -> state
+        & gCode %~ ((concat $ replicate (length addrs) [Eval, Print]) ++)
+        & gStack %~ ((addrs ++) . tail)
+        & gOutput %~ (++ "Constructor: " ++ show tag ++ " ")
+  where
+    number num = ("Number: " ++ show num ++ " ")
+
 isNumberNode (NNode _) = True
 isNumberNode _ = False
-
 
 hNull :: Addr
 hNull = -1
@@ -159,6 +197,16 @@ hNull = -1
 unwind :: GMState -> GMState
 unwind state@GMState{..} = case hLookup _gHeap (head _gStack) of
     NInd a -> state & gStack.ix 0 .~ a  & gCode .~ [Unwind]
+    NConstr _ _ -> handleConstrNode
+      where
+        handleConstrNode
+            | null $ state ^. gDump = error "dump should not be empty"
+            | otherwise =
+                let (instrs, stack) = head _gDump
+                in state
+                    & gCode .~ instrs
+                    & gStack._tail .~ stack
+                    & gDump %~ tail
     NNode n -> handleNumberNode
       where
         handleNumberNode
@@ -182,10 +230,10 @@ unwind state@GMState{..} = case hLookup _gHeap (head _gStack) of
             newStack = map (getArg . hLookup _gHeap) (tail stack)
 
 compile :: CoreProgram -> GMState
-compile program = GMState initialCode [] [] heap globals
+compile program = GMState [] initialCode [] [] heap globals
   where
     (heap, globals) = buildInitialHeap program
-    initialCode = [Pushglobal "main", Eval]
+    initialCode = [Pushglobal "main", Eval, Print]
 
 buildInitialHeap :: CoreProgram -> (Heap Node, Globals)
 buildInitialHeap program = foldl alloc (hInitial, M.empty) (compiled ++ primitives)
@@ -230,6 +278,14 @@ compileC env (EVar name)
 compileC env (ELet recursive defs e)
     | recursive = compileLetRec compileC defs env e
     | otherwise = compileLet compileC defs env e
+compileC env (EConstr tag arity exprs) =
+    compilePack env exprs ++ [Pack tag arity]
+  where
+    compilePack env [] = []
+    compilePack env (expr:exprs) =
+        compileC env expr ++ compilePack (argOffset 1 env) exprs
+compileC env (ECase expr alts) =
+    compileC env expr ++ [CaseJump (compileAlts alts env)]
 compileC env expr = case expr of
     ENum n -> [Pushint n]
     EAp e1 e2 -> compileC env e2 ++ compileC (argOffset 1 env) e1 ++ [Mkap]
@@ -237,6 +293,14 @@ compileC env expr = case expr of
 compileArgs defs env =
     let n = length defs
     in  (zip (map fst defs) [n-1, n-2 .. 0]) ++ argOffset n env
+
+compileAlts :: [CoreAlt] -> [(Name, Int)] -> [(Int, GMCode)]
+compileAlts alts env = map compileAlt alts
+  where
+    compileAlt (tag, names, body) =
+        let n = length names
+            newEnv = zip names [0..] ++ argOffset n env
+        in (tag, [Split n] ++ compileC newEnv body ++ [Slide n])
 
 compileLet :: GMCompiler -> [(Name, CoreExpr)] -> GMCompiler
 compileLet compile' defs env expr =
@@ -293,6 +357,18 @@ testProgram5 =
     ]
 
 testProgram6 :: CoreProgram
-testProgram6 =
-    [ ("main", [], EVar "+" `EAp` ENum 1 `EAp` ENum 1)
+testProgram6 = [("main", [], EVar "+" `EAp` ENum 1 `EAp` ENum 1)]
+
+testProgram7 :: CoreProgram
+testProgram7 = [("main", [], EConstr 1 2 [ENum 1, ENum 1])]
+
+testProgram8 :: CoreProgram
+testProgram8 =
+    [   ( "main"
+        , []
+        , ECase (EConstr 1 2 [ENum 2, ENum 3])
+            [ (0, [], ENum 54321)
+            , (1, ["x1", "x2"], EVar "x1")
+            ]
+        )
     ]
