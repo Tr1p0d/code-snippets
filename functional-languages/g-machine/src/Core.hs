@@ -10,7 +10,9 @@ type IsRec = Bool
 data Expr a
     = EVar Name -- Variables
     | ENum Int -- Numbers
-    | EConstr Int Int -- Constructor tag arity
+    -- | This thing was not in the original book, but it is sort of
+    -- a valuable simplification.
+    | EConstr Int Int [Expr a] -- Constructor tag arity expressions
     | EAp (Expr a) (Expr a) -- Applications
     | ELet -- Let (rec) expressions
         IsRec -- boolean with True = recursive,
@@ -45,4 +47,3 @@ preludes =
 s :: CoreScDefn
 s = ("S", ["f","g","x"], EAp (EAp (EVar "f") (EVar "x"))
         (EAp (EVar "g") (EVar "x")))
-

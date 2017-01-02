@@ -279,7 +279,7 @@ compileC env (ELet recursive defs e)
     | recursive = compileLetRec compileC defs env e
     | otherwise = compileLet compileC defs env e
 compileC env (EConstr tag arity exprs) =
-    compilePack env exprs ++ [Pack tag arity]
+    compilePack env (reverse exprs) ++ [Pack tag arity]
   where
     compilePack env [] = []
     compilePack env (expr:exprs) =
@@ -300,7 +300,7 @@ compileAlts alts env = map compileAlt alts
     compileAlt (tag, names, body) =
         let n = length names
             newEnv = zip names [0..] ++ argOffset n env
-        in (tag, [Split n] ++ compileC newEnv body ++ [Slide n])
+        in (tag, [Split n] ++ compileR body newEnv ++ [Slide n])
 
 compileLet :: GMCompiler -> [(Name, CoreExpr)] -> GMCompiler
 compileLet compile' defs env expr =
