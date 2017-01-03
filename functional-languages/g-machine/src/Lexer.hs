@@ -13,8 +13,8 @@ coreLanguageDef = emptyDef
     , commentEnd = "*/"
     , commentLine = "//"
     , nestedComments = False
-    , identStart = alphaNum
-    , identLetter = alphaNum <|> digit <|> char '_'
+    , identStart = letter
+    , identLetter = letter <|> digit <|> char '_'
     , opStart = oneOf "=+-*/<>&|"
     , opLetter = oneOf "=+-*/<>&|"
     , reservedOpNames = "=" : arithmetics <> relations <> booleans
@@ -29,6 +29,8 @@ coreLanguageDef = emptyDef
         , "of"
         , "\\"
         , "."
+        , "Pack"
+        , "->"
         ]
     arithmetics =
         [ "+"
@@ -59,10 +61,13 @@ TokenParser
     , reservedOp = m_reservedOp
     , reserved = m_reserved
     , semiSep = m_semiSep
+    , semiSep1 = m_semiSep1
     , whiteSpace = m_whiteSpace
     , integer = m_integer
     , stringLiteral = m_stringLit
     , charLiteral = m_charLit
     , lexeme = m_lexeme
     , comma = m_comma
+    , angles = m_angles
+    , operator = m_operator
     } = makeTokenParser coreLanguageDef

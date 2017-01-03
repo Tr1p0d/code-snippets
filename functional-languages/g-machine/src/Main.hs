@@ -11,23 +11,24 @@ import Control.Lens.Cons
 
 import Core
 import Heap
+import Parser
 
 import Debug.Trace
 
 data Instruction
     = Add
     | Alloc Int
-    | CaseJump [(Int, GMCode)]
+    | CaseJump [(Integer, GMCode)]
     | Cond GMCode GMCode
     | Eq
     | Eval
     | Mkap
-    | Pack Int Int
+    | Pack Integer Integer
     | Pop Int
     | Print
     | Push Int
     | Pushglobal Name
-    | Pushint Int
+    | Pushint Integer
     | Slide Int
     | Split Int
     | Unwind
@@ -38,11 +39,11 @@ type GMCode = [Instruction]
 type Addr = Int
 
 data Node
-    = NNode Int
+    = NNode Integer
     | NApp Addr Addr
     | NGlobal Int GMCode
     | NInd Addr
-    | NConstr Int [Addr]
+    | NConstr Integer [Addr]
   deriving (Show)
 
 type Globals = M.Map Name Addr
@@ -164,13 +165,14 @@ dispatch (Cond i1 i2) state@GMState{..}
         | otherwise = error "not a boolean"
 
 dispatch (Pack t n) state@GMState{..} =
-    let (newAddr, newHeap) = hAlloc _gHeap (NConstr t (take n _gStack))
-    in state & gStack %~ ((newAddr:) . drop n) & gHeap .~ newHeap
+    let n' = fromInteger n
+        (newAddr, newHeap) = hAlloc _gHeap (NConstr t (take n' _gStack))
+    in state & gStack %~ ((newAddr:) . drop n') & gHeap .~ newHeap
 
 dispatch (CaseJump tagAssoc) state@GMState{..} =
     case hLookup _gHeap (head _gStack) of
         NConstr t _ -> state
-            & gCode %~ ((tagMap M.! t) ++)
+            & gCode %~ ((tagMap M.! (fromInteger t)) ++)
         _ -> error "cannot multiway jump on non-constructor"
   where
     tagMap = M.fromAscList tagAssoc
@@ -294,7 +296,7 @@ compileArgs defs env =
     let n = length defs
     in  (zip (map fst defs) [n-1, n-2 .. 0]) ++ argOffset n env
 
-compileAlts :: [CoreAlt] -> [(Name, Int)] -> [(Int, GMCode)]
+compileAlts :: [CoreAlt] -> [(Name, Int)] -> [(Integer, GMCode)]
 compileAlts alts env = map compileAlt alts
   where
     compileAlt (tag, names, body) =

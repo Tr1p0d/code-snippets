@@ -2,17 +2,16 @@
 
 module Core where
 
-import qualified Data.Text as T (Text)
 
-type Name = T.Text
+type Name = String
 type IsRec = Bool
 
 data Expr a
     = EVar Name -- Variables
-    | ENum Int -- Numbers
+    | ENum Integer -- Numbers
     -- | This thing was not in the original book, but it is sort of
     -- a valuable simplification.
-    | EConstr Int Int [Expr a] -- Constructor tag arity expressions
+    | EConstr Integer Integer [Expr a] -- Constructor tag arity expressions
     | EAp (Expr a) (Expr a) -- Applications
     | ELet -- Let (rec) expressions
         IsRec -- boolean with True = recursive,
@@ -25,7 +24,7 @@ data Expr a
   deriving (Show)
 type CoreExpr = Expr Name
 
-type Alter a = (Int, [a], Expr a)
+type Alter a = (Integer, [a], Expr a)
 type CoreAlt = Alter Name
 
 type Program a = [ScDefn a]

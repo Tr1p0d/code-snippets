@@ -20,6 +20,8 @@ executable g-machine
 
     other-modules:      Core
                         Heap
+                        Parser
+                        Lexer
 
     -- other-extensions:
 
@@ -27,6 +29,7 @@ executable g-machine
                         , text ==1.2.*
                         , lens ==4.14.*
                         , containers ==0.5.*
+                        , parsec ==3.1.*
 
     hs-source-dirs:      src
     default-language:    Haskell2010
