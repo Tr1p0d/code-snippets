@@ -5,9 +5,13 @@ module Main
     (main)
   where
 
+import System.Environment
+
 import qualified Data.Map.Strict as M
+
 import Control.Lens
 import Control.Lens.Cons
+import Text.Parsec
 
 import Core
 import Heap
@@ -327,50 +331,16 @@ compileLetRec compile' defs env expr =
         ++ compileLetRec' args (argOffset 1 env')
 
 main :: IO ()
-main =
-    let (a:_) = reverse $ evalG $ compile testProgram1
-    in print (hLookup (a ^. gHeap) (head $ a ^. gStack))
+main = do
+    (file:_) <- getArgs
+    contents <- readFile file
+    case parse parseCoreProgram file contents of
+        Right program -> stepRun $ evalG $ compile (traceShowId program)
+        Left err -> error $ show err
 
-testProgram1 :: CoreProgram
-testProgram1 =
-    [("main", [], EVar "S" `EAp` (EVar "K") `EAp` (EVar "K") `EAp` (ENum 3))]
-
-testProgram2 :: CoreProgram
-testProgram2 = [("main", [], EVar "K" `EAp` ENum 4 `EAp` ENum 3)]
-
-testProgram3 :: CoreProgram
-testProgram3 =
-    [ ("id", [], EVar "S" `EAp` EVar "K" `EAp` EVar "K")
-    , ("main", [], EVar "twice" `EAp` EVar "id" `EAp` ENum 3)]
-
-testProgram4 :: CoreProgram
-testProgram4 =
-    [ ("three", [], ELet False [("x", ENum 4)] (EVar "x"))
-    , ("main", [], EVar "three")
-    ]
-
-testProgram5 :: CoreProgram
-testProgram5 =
-    [ ("three", [], ELet True
-        [ ("x", ENum 4)
-        , ("y", EVar "x")
-        ] (EVar "x"))
-    , ("main", [], EVar "three")
-    ]
-
-testProgram6 :: CoreProgram
-testProgram6 = [("main", [], EVar "+" `EAp` ENum 1 `EAp` ENum 1)]
-
-testProgram7 :: CoreProgram
-testProgram7 = [("main", [], EConstr 1 2 [ENum 1, ENum 1])]
-
-testProgram8 :: CoreProgram
-testProgram8 =
-    [   ( "main"
-        , []
-        , ECase (EConstr 1 2 [ENum 2, ENum 3])
-            [ (0, [], ENum 54321)
-            , (1, ["x1", "x2"], EVar "x1")
-            ]
-        )
-    ]
+stepRun :: [GMState] -> IO ()
+stepRun [] = return ()
+stepRun (s:ss) = do
+    putStrLn $ show s
+    getChar
+    stepRun ss

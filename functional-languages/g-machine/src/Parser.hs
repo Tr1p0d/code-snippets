@@ -3,7 +3,10 @@
 
 module Parser where
 
+import Data.Functor.Identity
+
 import Text.Parsec
+import Text.Parsec.Expr
 import Text.Parsec.String (Parser)
 
 import Core
@@ -20,16 +23,12 @@ parseScDefn = (,,)
     <*> parseExpr
 
 parseExpr =
-    (try parseApplication)
-    <|> parseAExpr
-    <|> (try $ parseLet' True)
+    (try $ parseLet' True)
     <|> parseLet' False
     <|> parseCase
     <|> parseLambda
-    <|> EVar <$> m_operator
+    <|> operatorParser
   where
-    parseApplication = EAp <$> parseAExpr <*> parseAExpr
-
     parseLambda = m_reserved "\\" >> ELam
         <$> many1 m_identifier <* m_reserved "."
         <*> parseExpr
@@ -67,7 +66,27 @@ parseAExpr =
     parsePack = do
         m_reserved "Pack"
         (tag, arity) <- m_braces parseConstr
-        args <- many parseExpr
+        args <- many parseAExpr
         return $ EConstr tag arity args
       where
         parseConstr = (,) <$> m_integer <* m_comma <*> m_integer
+
+operatorParser =
+    buildExpressionParser operatorTable parseAExpr
+  where
+    parseApplication = do
+        (spineTop:rest) <- many1 parseAExpr
+        return $ foldl EAp spineTop rest
+
+operatorTable :: OperatorTable String u Identity CoreExpr
+operatorTable =
+    [ [ Infix (reservedOp' "*" >>= return . binaryOperator) AssocRight
+      ]
+    , [ Infix (reservedOp' "+" >>= return . binaryOperator) AssocRight
+      ]
+    , [ Infix (m_whiteSpace >> return EAp) AssocLeft
+      ]
+    ]
+  where
+    reservedOp' x = m_reservedOp x *> return x
+    binaryOperator op x y = EVar op `EAp` x `EAp` y
