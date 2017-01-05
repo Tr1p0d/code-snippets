@@ -1,4 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 module Main
@@ -12,6 +14,8 @@ import qualified Data.Map.Strict as M
 import Control.Lens
 import Control.Lens.Cons
 import Text.Parsec
+import Text.PrettyPrint
+import Text.PrettyPrint.HughesPJClass
 
 import Core
 import Heap
@@ -50,7 +54,18 @@ data Node
     | NConstr Integer [Addr]
   deriving (Show)
 
+instance Pretty Node where
+    pPrint = text . show
+
 type Globals = M.Map Name Addr
+
+instance Pretty Globals where
+    pPrint = vcat . map pPrintGlobal . M.toList
+      where
+        pPrintGlobal (symbol, address) =
+            pPrint symbol
+            <> text ":"
+            <+> pPrint address
 
 type GMDump = [(GMCode, [Addr])]
 
@@ -66,21 +81,25 @@ data GMState = GMState
     }
 makeLenses ''GMState
 
-instance Show GMState where
-    show GMState{..} = "\n" ++ output
-        +\+ code
-        +\+ stack
-        +\+ dump
-        +\+ heap
-        +\+ globals
+instance Pretty GMState where
+    pPrint GMState{..} = vcat
+        [output
+        , code
+        , stack
+        , dump
+        , heap
+        , globals
+        ]
       where
-        s1 +\+ s2 = s1 ++ "\n\n" ++ s2
-        code = show _gCode
-        stack = show _gStack
-        heap = show _gHeap
-        globals = show _gGlobals
-        dump = show _gDump
-        output = show _gOutput
+        code = fsep [text "Code:", pPrint _gCode]
+        stack = fsep [text "Stack:", pPrint _gStack]
+        heap = fsep [text "Heap:", nest 4 $ pPrint _gHeap]
+        globals = fsep [text "Globals:", nest 4 $ pPrint _gGlobals]
+        dump = fsep [text "Dump:", pPrint _gDump]
+        output = fsep [text "Output:", pPrint _gOutput]
+
+instance Pretty Instruction where
+    pPrint = text . show
 
 evalG :: GMState -> [GMState]
 evalG state
@@ -335,12 +354,12 @@ main = do
     (file:_) <- getArgs
     contents <- readFile file
     case parse parseCoreProgram file contents of
-        Right program -> stepRun $ evalG $ compile (traceShowId program)
+        Right program -> stepRun $ evalG $ compile program
         Left err -> error $ show err
 
 stepRun :: [GMState] -> IO ()
 stepRun [] = return ()
 stepRun (s:ss) = do
-    putStrLn $ show s
+    putStrLn $ render $ pPrint s
     getChar
     stepRun ss
