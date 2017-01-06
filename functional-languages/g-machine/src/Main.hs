@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -7,6 +8,7 @@ module Main
     (main)
   where
 
+import Data.Tuple (swap)
 import System.Environment
 
 import qualified Data.Map.Strict as M
@@ -55,7 +57,7 @@ data Node
   deriving (Show)
 
 instance Pretty Node where
-    pPrint = text . show
+    pPrint node = text $ show node
 
 type Globals = M.Map Name Addr
 
@@ -63,7 +65,7 @@ instance Pretty Globals where
     pPrint = vcat . map pPrintGlobal . M.toList
       where
         pPrintGlobal (symbol, address) =
-            pPrint symbol
+            text "Supercombinator" <+> quotes (text symbol)
             <> text ":"
             <+> pPrint address
 
@@ -83,7 +85,7 @@ makeLenses ''GMState
 
 instance Pretty GMState where
     pPrint GMState{..} = vcat
-        [output
+        [ output
         , code
         , stack
         , dump
@@ -93,10 +95,22 @@ instance Pretty GMState where
       where
         code = fsep [text "Code:", pPrint _gCode]
         stack = fsep [text "Stack:", pPrint _gStack]
-        heap = fsep [text "Heap:", nest 4 $ pPrint _gHeap]
+        heap = fsep [text "Heap:", nest 4 $ prettyHeap _gHeap _gGlobals]
         globals = fsep [text "Globals:", nest 4 $ pPrint _gGlobals]
         dump = fsep [text "Dump:", pPrint _gDump]
         output = fsep [text "Output:", pPrint _gOutput]
+
+prettyHeap :: Heap Node -> Globals -> Doc
+prettyHeap (Heap (_,_,m)) globals = M.foldlWithKey prettyHeapCell empty m
+  where
+    prettyHeapCell doc addr node = doc $$ case node of
+        NInd iAddr -> text "=>" <+> int iAddr
+        NNode number -> quotes $ integer number
+        NGlobal _ code ->
+            let inverseG = M.fromList $ concatMap ((:[]) . swap) (M.toList globals)
+            in text "SC" <+> quotes (text (inverseG M.! addr)) <+> pPrint code
+        NConstr tag args -> text "Data" <+> integer tag <+> pPrint args
+        NApp a1 a2 -> pPrint a1 <+> text "@" <+> pPrint a2
 
 instance Pretty Instruction where
     pPrint = text . show
