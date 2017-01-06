@@ -109,6 +109,7 @@ prettyHeap (Heap (_,_,m)) globals = M.foldlWithKey prettyHeapCell empty m
         ap@(NApp a1 a2) -> prettyApplication addr ap
 
     prettyApplication addr = \case
+        NInd addr' -> text "=>" <+> prettyApplication addr' (m M.! addr')
         NGlobal _ _ -> printGlobal addr
         NNode num -> printNum num
         NApp a1 a2 -> text "@" <+> nest 4 (vcat
