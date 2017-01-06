@@ -65,9 +65,7 @@ instance Pretty Globals where
     pPrint = vcat . map pPrintGlobal . M.toList
       where
         pPrintGlobal (symbol, address) =
-            text "Supercombinator" <+> quotes (text symbol)
-            <> text ":"
-            <+> pPrint address
+            quotes (text symbol) <> text ":" <+> pPrint address
 
 type GMDump = [(GMCode, [Addr])]
 
@@ -103,14 +101,26 @@ instance Pretty GMState where
 prettyHeap :: Heap Node -> Globals -> Doc
 prettyHeap (Heap (_,_,m)) globals = M.foldlWithKey prettyHeapCell empty m
   where
-    prettyHeapCell doc addr node = doc $$ case node of
+    prettyHeapCell doc addr node = doc $$ int addr <> text ":" <+> case node of
         NInd iAddr -> text "=>" <+> int iAddr
-        NNode number -> quotes $ integer number
-        NGlobal _ code ->
-            let inverseG = M.fromList $ concatMap ((:[]) . swap) (M.toList globals)
-            in text "SC" <+> quotes (text (inverseG M.! addr)) <+> pPrint code
+        NNode number -> printNum number
+        NGlobal _ _ -> printGlobal addr
         NConstr tag args -> text "Data" <+> integer tag <+> pPrint args
-        NApp a1 a2 -> pPrint a1 <+> text "@" <+> pPrint a2
+        ap@(NApp a1 a2) -> prettyApplication addr ap
+
+    prettyApplication addr = \case
+        NGlobal _ _ -> printGlobal addr
+        NNode num -> printNum num
+        NApp a1 a2 -> text "@" <+> nest 4 (vcat
+            [ prettyApplication a2 (m M.! a2)
+            , prettyApplication a1 (m M.! a1)
+            ])
+
+    printGlobal addr =
+        let inverseG = M.fromList $ concatMap ((:[]) . swap) (M.toList globals)
+        in text "SC" <+> quotes (text (inverseG M.! addr))
+
+    printNum num = text "Num" <+> quotes (integer num)
 
 instance Pretty Instruction where
     pPrint = text . show
