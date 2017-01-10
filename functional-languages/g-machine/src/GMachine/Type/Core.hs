@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Core where
+module GMachine.Type.Core where
 
 
 type Name = String

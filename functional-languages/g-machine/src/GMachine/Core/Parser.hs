@@ -1,16 +1,47 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
-module Parser where
+module GMachine.Core.Parser
+    ( parseCoreProgram )
+  where
 
-import Data.Functor.Identity
+import Data.Functor.Identity (Identity)
 
 import Text.Parsec
+    ( (<|>)
+    , many
+    , many1
+    , try
+    )
 import Text.Parsec.Expr
+    ( Assoc(AssocLeft, AssocRight)
+    , Operator(Infix)
+    , OperatorTable
+    , buildExpressionParser
+    )
 import Text.Parsec.String (Parser)
 
-import Core
-import Lexer
+import GMachine.Type.Core
+    ( CoreAlt
+    , CoreExpr
+    , CoreProgram
+    , CoreScDefn
+    , Expr(..)
+    , Name
+    )
+import GMachine.Core.Lexer
+    ( m_angles
+    , m_braces
+    , m_comma
+    , m_identifier
+    , m_integer
+    , m_parens
+    , m_reserved
+    , m_reservedOp
+    , m_semiSep
+    , m_semiSep1
+    , m_whiteSpace
+    )
 
 
 parseCoreProgram :: Parser CoreProgram

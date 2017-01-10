@@ -19,11 +19,10 @@ import Text.Parsec
 import Text.PrettyPrint
 import Text.PrettyPrint.HughesPJClass
 
-import Core
-import Heap
-import Parser
+import GMachine.Type.Core
+import GMachine.Type.Heap
+import GMachine.Core.Parser
 
-import Debug.Trace
 
 data Instruction
     = Add
@@ -99,7 +98,7 @@ instance Pretty GMState where
         output = fsep [text "Output:", pPrint _gOutput]
 
 prettyHeap :: Heap Node -> Globals -> Doc
-prettyHeap (Heap (_,_,m)) globals = M.foldlWithKey prettyHeapCell empty m
+prettyHeap (Heap _ _ m) globals = M.foldlWithKey prettyHeapCell empty m
   where
     prettyHeapCell doc addr node = doc $$ int addr <> text ":" <+> case node of
         NInd iAddr -> text "=>" <+> int iAddr

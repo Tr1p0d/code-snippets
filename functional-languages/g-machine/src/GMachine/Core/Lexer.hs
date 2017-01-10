@@ -1,10 +1,47 @@
-module Lexer where
+module GMachine.Core.Lexer
+    ( m_angles
+    , m_braces
+    , m_comma
+    , m_identifier
+    , m_integer
+    , m_parens
+    , m_reserved
+    , m_reservedOp
+    , m_semiSep
+    , m_semiSep1
+    , m_whiteSpace
+    )
+  where
 
-import Data.Monoid
+import Data.Monoid ((<>))
 
-import Text.Parsec
+import Text.Parsec ((<|>), char, digit, letter, oneOf)
 import Text.Parsec.Token
-import Text.Parsec.Language
+    ( GenTokenParser(TokenParser)
+    , angles
+    , braces
+    , comma
+    , commentEnd
+    , commentLine
+    , commentStart
+    , identLetter
+    , identStart
+    , identifier
+    , integer
+    , makeTokenParser
+    , nestedComments
+    , opLetter
+    , opStart
+    , parens
+    , reserved
+    , reservedNames
+    , reservedOp
+    , reservedOpNames
+    , semiSep
+    , semiSep1
+    , whiteSpace
+    )
+import Text.Parsec.Language (LanguageDef, emptyDef)
 
 
 coreLanguageDef :: LanguageDef st
@@ -52,22 +89,15 @@ coreLanguageDef = emptyDef
         ]
 
 TokenParser
-    { parens = m_parens
+    { angles = m_angles
     , braces = m_braces
+    , comma = m_comma
     , identifier = m_identifier
-    , commaSep1 = m_commaSep1
-    , commaSep = m_commaSep
-    , semi = m_semi
-    , reservedOp = m_reservedOp
+    , integer = m_integer
+    , parens = m_parens
     , reserved = m_reserved
+    , reservedOp = m_reservedOp
     , semiSep = m_semiSep
     , semiSep1 = m_semiSep1
     , whiteSpace = m_whiteSpace
-    , integer = m_integer
-    , stringLiteral = m_stringLit
-    , charLiteral = m_charLit
-    , lexeme = m_lexeme
-    , comma = m_comma
-    , angles = m_angles
-    , operator = m_operator
     } = makeTokenParser coreLanguageDef
