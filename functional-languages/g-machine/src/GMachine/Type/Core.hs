@@ -1,9 +1,8 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module GMachine.Type.Core where
 
+import GMachine.Type.Common (Name)
 
-type Name = String
+
 type IsRec = Bool
 
 data Expr a

@@ -21,14 +21,6 @@ import Text.Parsec.Expr
     )
 import Text.Parsec.String (Parser)
 
-import GMachine.Type.Core
-    ( CoreAlt
-    , CoreExpr
-    , CoreProgram
-    , CoreScDefn
-    , Expr(..)
-    , Name
-    )
 import GMachine.Core.Lexer
     ( m_angles
     , m_braces
@@ -41,6 +33,14 @@ import GMachine.Core.Lexer
     , m_semiSep
     , m_semiSep1
     , m_whiteSpace
+    )
+import GMachine.Type.Common (Name)
+import GMachine.Type.Core
+    ( CoreAlt
+    , CoreExpr
+    , CoreProgram
+    , CoreScDefn
+    , Expr(..)
     )
 
 

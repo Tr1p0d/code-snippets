@@ -20,8 +20,10 @@ executable g-machine
 
     other-modules:      GMachine.Core.Parser
                         GMachine.Core.Lexer
+                        GMachine.Type.Common
                         GMachine.Type.Core
                         GMachine.Type.Heap
+                        GMachine.Type.InstructionSet
 
     -- other-extensions:
 

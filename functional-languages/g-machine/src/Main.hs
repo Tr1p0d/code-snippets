@@ -19,33 +19,12 @@ import Text.Parsec
 import Text.PrettyPrint
 import Text.PrettyPrint.HughesPJClass
 
+import GMachine.Type.Common (Addr, Name)
 import GMachine.Type.Core
 import GMachine.Type.Heap
+import GMachine.Type.InstructionSet (GMCode, Instruction(..))
 import GMachine.Core.Parser
 
-
-data Instruction
-    = Add
-    | Alloc Int
-    | CaseJump [(Integer, GMCode)]
-    | Cond GMCode GMCode
-    | Eq
-    | Eval
-    | Mkap
-    | Pack Integer Integer
-    | Pop Int
-    | Print
-    | Push Int
-    | Pushglobal Name
-    | Pushint Integer
-    | Slide Int
-    | Split Int
-    | Unwind
-    | Update Int
-  deriving (Eq, Show)
-type GMCode = [Instruction]
-
-type Addr = Int
 
 data Node
     = NNode Integer
