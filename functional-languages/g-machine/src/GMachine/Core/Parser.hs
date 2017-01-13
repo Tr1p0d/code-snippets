@@ -14,7 +14,7 @@ import Text.Parsec
     , try
     )
 import Text.Parsec.Expr
-    ( Assoc(AssocLeft, AssocRight)
+    ( Assoc(AssocLeft, AssocNone, AssocRight)
     , Operator(Infix)
     , OperatorTable
     , buildExpressionParser
@@ -111,11 +111,15 @@ operatorParser =
 
 operatorTable :: OperatorTable String u Identity CoreExpr
 operatorTable =
-    [ [ Infix (reservedOp' "*" >>= return . binaryOperator) AssocRight
+    [ [ Infix (m_whiteSpace >> return EAp) AssocLeft
+      ]
+    , [ Infix (reservedOp' "*" >>= return . binaryOperator) AssocRight
+      , Infix (reservedOp' "/" >>= return . binaryOperator) AssocNone
       ]
     , [ Infix (reservedOp' "+" >>= return . binaryOperator) AssocRight
+      , Infix (reservedOp' "-" >>= return . binaryOperator) AssocNone
       ]
-    , [ Infix (m_whiteSpace >> return EAp) AssocLeft
+    , [ Infix (reservedOp' "==" >>= return . binaryOperator) AssocNone
       ]
     ]
   where

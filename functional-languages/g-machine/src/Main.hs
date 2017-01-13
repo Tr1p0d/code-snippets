@@ -22,7 +22,12 @@ import Text.PrettyPrint.HughesPJClass
 import GMachine.Type.Common (Addr, Name)
 import GMachine.Type.Core
 import GMachine.Type.Heap
-import GMachine.Type.InstructionSet (GMCode, Instruction(..))
+import GMachine.Type.InstructionSet
+    ( GMCode
+    , Instruction(..)
+    , ArithOp(..)
+    , RelOp(..)
+    )
 import GMachine.Core.Parser
 
 
@@ -155,29 +160,6 @@ dispatch Eval state@GMState{..} = state
     & gStack %~ ((:[]) . head)
     & gDump %~ ((_gCode, tail _gStack):)
 
-dispatch Add state@GMState{..}
-    | (isNumberNode $ hLookup _gHeap (head _gStack)) &&
-      (isNumberNode $ hLookup _gHeap (head $ tail _gStack)) =
-        let (nAddress, nHeap) = hAlloc _gHeap (NNode (x+y))
-            (NNode x) = hLookup _gHeap (head _gStack)
-            (NNode y) = hLookup _gHeap (head $ tail _gStack)
-        in state & gStack %~ ((nAddress:) . drop 2) & gHeap .~ nHeap
-    | otherwise = error "dyadic operation not applied to numbers"
-
-dispatch Eq state@GMState{..}
-    | (isNumberNode $ hLookup _gHeap (head _gStack)) &&
-      (isNumberNode $ hLookup _gHeap (head $ tail _gStack)) =
-        let (nAddress, nHeap) = hAlloc _gHeap
-                (NNode (mapInteger (x == y)))
-            (NNode x) = hLookup _gHeap (head _gStack)
-            (NNode y) = hLookup _gHeap (head $ tail _gStack)
-        in state & gStack %~ ((nAddress:) . drop 2) & gHeap .~ nHeap
-    | otherwise = error "dyadic operation not applied to numbers"
-  where
-    mapInteger x
-        | x = 1
-        | otherwise = 0
-
 dispatch (Cond i1 i2) state@GMState{..}
     | isNumberNode $ hLookup _gHeap (head _gStack) =
         if mapBoolean $ hLookup _gHeap (head _gStack)
@@ -215,6 +197,38 @@ dispatch Print state@GMState{..} = case hLookup _gHeap (head _gStack) of
         & gOutput %~ (++ "Constructor: " ++ show tag ++ " ")
   where
     number num = ("Number: " ++ show num ++ " ")
+
+dispatch (Arith binop) state@GMState{..}
+    | (isNumberNode $ hLookup _gHeap (head _gStack)) &&
+      (isNumberNode $ hLookup _gHeap (head $ tail _gStack)) =
+        let (NNode x) = hLookup _gHeap (head _gStack)
+            (NNode y) = hLookup _gHeap (head $ tail _gStack)
+            (nAddress, nHeap) = case binop of
+                Add -> hAlloc _gHeap $ NNode (x+y)
+                Sub -> hAlloc _gHeap $ NNode (x-y)
+                Mul -> hAlloc _gHeap $ NNode (x*y)
+                Div -> hAlloc _gHeap $ NNode (x `div` y)
+        in state & gStack %~ ((nAddress:) . drop 2) & gHeap .~ nHeap
+    | otherwise = error "dyadic operation not applied to numbers"
+
+dispatch (Rel relop) state@GMState{..}
+    | (isNumberNode $ hLookup _gHeap (head _gStack)) &&
+      (isNumberNode $ hLookup _gHeap (head $ tail _gStack)) =
+        let (NNode x) = hLookup _gHeap (head _gStack)
+            (NNode y) = hLookup _gHeap (head $ tail _gStack)
+            (nAddress, nHeap) = case relop of
+                Eq -> hAlloc _gHeap $ NNode $ mapInteger (x==y)
+                Neq -> hAlloc _gHeap $ NNode $ mapInteger (x/=y)
+                Greater -> hAlloc _gHeap $ NNode $ mapInteger (x>y)
+                Geq -> hAlloc _gHeap $ NNode $ mapInteger (x>=y)
+                Less -> hAlloc _gHeap $ NNode $ mapInteger (x<y)
+                Leq -> hAlloc _gHeap $ NNode $ mapInteger (x<=y)
+        in state & gStack %~ ((nAddress:) . drop 2) & gHeap .~ nHeap
+    | otherwise = error "dyadic operation not applied to numbers"
+  where
+    mapInteger x
+        | x = 1
+        | otherwise = 0
 
 isNumberNode (NNode _) = True
 isNumberNode _ = False
@@ -267,11 +281,11 @@ buildInitialHeap :: CoreProgram -> (Heap Node, Globals)
 buildInitialHeap program = foldl alloc (hInitial, M.empty) (compiled ++ primitives)
   where
     primitives =
-        [ ("+", 2, [Push 1, Eval, Push 1, Eval, Add, Update 2, Pop 2, Unwind])
-        --, ("-" 2, [Push 1, Eval, Push 1, Eval, Sub, Update 2, Pop 2, Unwind])
-        --, ("*" 2, [Push 1, Eval, Push 1, Eval, Mul, Update 2, Pop 2, Unwind])
-        --, ("/", 2, [Push 1, Eval, Push 1, Eval, Div, Update 2, Pop 2, Unwind])
-        , ("==", 2, [Push 1, Eval, Push 1, Eval, Eq, Update 2, Pop 2, Unwind])
+        [ ("+", 2, [Push 1, Eval, Push 1, Eval, Arith Add, Update 2, Pop 2, Unwind])
+        , ("-", 2, [Push 1, Eval, Push 1, Eval, Arith Sub, Update 2, Pop 2, Unwind])
+        , ("*", 2, [Push 1, Eval, Push 1, Eval, Arith Mul, Update 2, Pop 2, Unwind])
+        , ("/", 2, [Push 1, Eval, Push 1, Eval, Arith Div, Update 2, Pop 2, Unwind])
+        , ("==", 2, [Push 1, Eval, Push 1, Eval, Rel Eq, Update 2, Pop 2, Unwind])
         , ("if", 3,
             [Push 0, Eval, Cond [Push 1] [Push 2], Update 3, Pop 3, Unwind])
         ]

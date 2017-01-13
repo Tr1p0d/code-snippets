@@ -1,5 +1,9 @@
 module GMachine.Type.InstructionSet
-    (GMCode, Instruction(..))
+    ( GMCode
+    , Instruction(..)
+    , ArithOp(..)
+    , RelOp(..)
+    )
    where
 
 import GMachine.Type.Common (Name)
@@ -8,11 +12,9 @@ import GMachine.Type.Common (Name)
 type GMCode = [Instruction]
 
 data Instruction
-    = Add
-    | Alloc Int
+    = Alloc Int
     | CaseJump [(Integer, GMCode)]
     | Cond GMCode GMCode
-    | Eq
     | Eval
     | Mkap
     | Pack Integer Integer
@@ -25,4 +27,23 @@ data Instruction
     | Split Int
     | Unwind
     | Update Int
+    | Arith ArithOp
+    | Rel RelOp
   deriving (Eq, Show)
+
+data ArithOp
+    = Add
+    | Div
+    | Mul
+    | Sub
+  deriving (Eq, Show)
+
+data RelOp
+    = Eq
+    | Neq
+    | Greater
+    | Geq
+    | Less
+    | Leq
+  deriving (Eq, Show)
+
