@@ -18,12 +18,19 @@ cabal-version:       >=1.10
 executable g-machine
     main-is:            Main.hs
 
-    other-modules:      GMachine.Core.Parser
+    other-modules:
                         GMachine.Core.Lexer
+                        GMachine.Core.Parser
                         GMachine.Type.Common
                         GMachine.Type.Core
+                        GMachine.Type.GMDump
+                        GMachine.Type.GMOutput
+                        GMachine.Type.GMState
+                        GMachine.Type.Globals
                         GMachine.Type.Heap
                         GMachine.Type.InstructionSet
+                        GMachine.Type.Node
+
 
     -- other-extensions:
 

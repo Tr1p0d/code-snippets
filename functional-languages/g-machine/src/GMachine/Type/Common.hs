@@ -1,10 +1,6 @@
 module GMachine.Type.Common
-    ( Addr
-    , Name
-    )
-   where
+    (Name)
+  where
 
-
-type Addr = Int
 
 type Name = String

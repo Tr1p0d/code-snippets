@@ -19,9 +19,11 @@ import Text.Parsec
 import Text.PrettyPrint
 import Text.PrettyPrint.HughesPJClass
 
-import GMachine.Type.Common (Addr, Name)
+import GMachine.Type.Common (Name)
 import GMachine.Type.Core
 import GMachine.Type.Heap
+import GMachine.Type.GMOutput
+import GMachine.Type.GMState
 import GMachine.Type.InstructionSet
     ( GMCode
     , Instruction(..)
@@ -31,38 +33,14 @@ import GMachine.Type.InstructionSet
 import GMachine.Core.Parser
 
 
-data Node
-    = NNode Integer
-    | NApp Addr Addr
-    | NGlobal Int GMCode
-    | NInd Addr
-    | NConstr Integer [Addr]
-  deriving (Show)
-
 instance Pretty Node where
     pPrint node = text $ show node
-
-type Globals = M.Map Name Addr
 
 instance Pretty Globals where
     pPrint = vcat . map pPrintGlobal . M.toList
       where
         pPrintGlobal (symbol, address) =
             quotes (text symbol) <> text ":" <+> pPrint address
-
-type GMDump = [(GMCode, [Addr])]
-
-type GMOutput = String
-
-data GMState = GMState
-    { _gOutput :: GMOutput
-    , _gCode :: GMCode
-    , _gStack :: [Addr]
-    , _gDump :: GMDump
-    , _gHeap :: Heap Node
-    , _gGlobals :: Globals
-    }
-makeLenses ''GMState
 
 instance Pretty GMState where
     pPrint GMState{..} = vcat
@@ -232,9 +210,6 @@ dispatch (Rel relop) state@GMState{..}
 
 isNumberNode (NNode _) = True
 isNumberNode _ = False
-
-hNull :: Addr
-hNull = -1
 
 unwind :: GMState -> GMState
 unwind state@GMState{..} = case hLookup _gHeap (head _gStack) of
