@@ -6,6 +6,9 @@ module GMachine.Type.InstructionSet
     )
    where
 
+import Text.PrettyPrint (text)
+import Text.PrettyPrint.HughesPJClass (Pretty(pPrint))
+
 import GMachine.Type.Common (Name)
 
 
@@ -47,3 +50,5 @@ data RelOp
     | Leq
   deriving (Eq, Show)
 
+instance Pretty Instruction where
+    pPrint = text . show

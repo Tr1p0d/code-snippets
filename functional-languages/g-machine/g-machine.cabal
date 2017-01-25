@@ -21,6 +21,7 @@ executable g-machine
     other-modules:
                         GMachine.Core.Lexer
                         GMachine.Core.Parser
+                        GMachine.Type.Address
                         GMachine.Type.Common
                         GMachine.Type.Core
                         GMachine.Type.GMDump

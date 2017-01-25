@@ -19,11 +19,13 @@ import Text.Parsec
 import Text.PrettyPrint
 import Text.PrettyPrint.HughesPJClass
 
+import GMachine.Type.Address (Address(Addr), nullAddr)
 import GMachine.Type.Common (Name)
 import GMachine.Type.Core
-import GMachine.Type.Heap
+import GMachine.Type.Globals as Glob
 import GMachine.Type.GMOutput
 import GMachine.Type.GMState
+import GMachine.Type.Heap
 import GMachine.Type.InstructionSet
     ( GMCode
     , Instruction(..)
@@ -32,15 +34,6 @@ import GMachine.Type.InstructionSet
     )
 import GMachine.Core.Parser
 
-
-instance Pretty Node where
-    pPrint node = text $ show node
-
-instance Pretty Globals where
-    pPrint = vcat . map pPrintGlobal . M.toList
-      where
-        pPrintGlobal (symbol, address) =
-            quotes (text symbol) <> text ":" <+> pPrint address
 
 instance Pretty GMState where
     pPrint GMState{..} = vcat
@@ -54,38 +47,10 @@ instance Pretty GMState where
       where
         code = fsep [text "Code:", pPrint _gCode]
         stack = fsep [text "Stack:", pPrint _gStack]
-        heap = fsep [text "Heap:", nest 4 $ prettyHeap _gHeap _gGlobals]
+        heap = fsep [text "Heap:", nest 4 $ pPrint _gHeap]
         globals = fsep [text "Globals:", nest 4 $ pPrint _gGlobals]
         dump = fsep [text "Dump:", pPrint _gDump]
         output = fsep [text "Output:", pPrint _gOutput]
-
-prettyHeap :: Heap Node -> Globals -> Doc
-prettyHeap (Heap _ _ m) globals = M.foldlWithKey prettyHeapCell empty m
-  where
-    prettyHeapCell doc addr node = doc $$ int addr <> text ":" <+> case node of
-        NInd iAddr -> text "=>" <+> int iAddr
-        NNode number -> printNum number
-        NGlobal _ _ -> printGlobal addr
-        NConstr tag args -> text "Data" <+> integer tag <+> pPrint args
-        ap@(NApp a1 a2) -> prettyApplication addr ap
-
-    prettyApplication addr = \case
-        NInd addr' -> text "=>" <+> prettyApplication addr' (m M.! addr')
-        NGlobal _ _ -> printGlobal addr
-        NNode num -> printNum num
-        NApp a1 a2 -> text "@" <+> nest 4 (vcat
-            [ prettyApplication a2 (m M.! a2)
-            , prettyApplication a1 (m M.! a1)
-            ])
-
-    printGlobal addr =
-        let inverseG = M.fromList $ concatMap ((:[]) . swap) (M.toList globals)
-        in text "SC" <+> quotes (text (inverseG M.! addr))
-
-    printNum num = text "Num" <+> quotes (integer num)
-
-instance Pretty Instruction where
-    pPrint = text . show
 
 evalG :: GMState -> [GMState]
 evalG state
@@ -99,7 +64,8 @@ gStep state@(GMState _ (i:is) _ _ _ _) = dispatch i (state & gCode .~ is)
 
 dispatch :: Instruction -> GMState -> GMState
 dispatch (Pushglobal n) state@GMState{..} =
-    let address = _gGlobals M.! n in state & gStack %~ (address:)
+    let (Just address) = state ^. gGlobals.getGlobals.at n
+    in state & gStack %~ (address:)
 
 dispatch (Slide n) state = state & gStack %~ (drop n)
 
@@ -129,7 +95,7 @@ dispatch (Alloc n) state@GMState{..} =
   where
     allocNodes 0 heap = (heap, [])
     allocNodes n heap =
-        let (addr, heap') = hAlloc heap (NInd hNull)
+        let (addr, heap') = hAlloc heap (NInd nullAddr)
             (heap'', addrs) = allocNodes (n-1) heap'
         in (heap'', addr:addrs)
 
@@ -253,7 +219,7 @@ compile program = GMState [] initialCode [] [] heap globals
     initialCode = [Pushglobal "main", Eval, Print]
 
 buildInitialHeap :: CoreProgram -> (Heap Node, Globals)
-buildInitialHeap program = foldl alloc (hInitial, M.empty) (compiled ++ primitives)
+buildInitialHeap program = foldl alloc (hInitial, Glob.empty) (compiled ++ primitives)
   where
     primitives =
         [ ("+", 2, [Push 1, Eval, Push 1, Eval, Arith Add, Update 2, Pop 2, Unwind])
@@ -268,7 +234,7 @@ buildInitialHeap program = foldl alloc (hInitial, M.empty) (compiled ++ primitiv
     alloc (heap, globals) (name, nArgs, code) = (newHeap, newGlobals)
       where
         (a, newHeap) = hAlloc heap (NGlobal nArgs code)
-        newGlobals = M.insert name a globals
+        newGlobals = globals & getGlobals.at name ?~ a
 
 type GCompiledSC = (Name, Int, GMCode)
 
