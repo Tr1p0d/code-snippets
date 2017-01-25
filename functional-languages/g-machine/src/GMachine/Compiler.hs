@@ -26,17 +26,20 @@ compile program = GMState [] initialCode [] [] heap globals
     initialCode = [Pushglobal "main", Eval, Print]
 
 buildInitialHeap :: CoreProgram -> (Heap Node, Globals)
-buildInitialHeap program = foldl alloc (hInitial, Glob.empty) (compiled ++ primitives)
+buildInitialHeap program =
+    foldl alloc (hInitial, Glob.empty) (compiled ++ primitives)
   where
     primitives =
-        [ ("+", 2, [Push 1, Eval, Push 1, Eval, Arith Add, Update 2, Pop 2, Unwind])
-        , ("-", 2, [Push 1, Eval, Push 1, Eval, Arith Sub, Update 2, Pop 2, Unwind])
-        , ("*", 2, [Push 1, Eval, Push 1, Eval, Arith Mul, Update 2, Pop 2, Unwind])
-        , ("/", 2, [Push 1, Eval, Push 1, Eval, Arith Div, Update 2, Pop 2, Unwind])
-        , ("==", 2, [Push 1, Eval, Push 1, Eval, Rel Eq, Update 2, Pop 2, Unwind])
+        [ ("+", 2, binary $ Arith Add)
+        , ("-", 2, binary $ Arith Sub)
+        , ("*", 2, binary $ Arith Mul)
+        , ("/", 2, binary $ Arith Div)
+        , ("==", 2, binary $ Rel Eq)
         , ("if", 3,
             [Push 0, Eval, Cond [Push 1] [Push 2], Update 3, Pop 3, Unwind])
         ]
+      where
+        binary op = [Push 1, Eval, Push 1, Eval, op, Update 2, Pop 2, Unwind]
     compiled = map compileSc (program ++ preludes)
     alloc (heap, globals) (name, nArgs, code) = (newHeap, newGlobals)
       where
@@ -65,14 +68,14 @@ compileC env expr = case expr of
     EAp e1 e2 -> compileC env e2 ++ compileC (argOffset 1 env) e1 ++ [Mkap]
     ECase expr' alts -> compileC env expr' ++ [CaseJump (compileAlts alts env)]
     EConstr tag arity exprs ->
-        compilePack env (reverse exprs) ++ [Pack tag arity]
+        compileCPack env (reverse exprs) ++ [Pack tag arity]
     EVar name -> compileCVar name
     ELet recursive defs e -> compileCLet recursive defs e
     -- I wonder how ELam is compiled...
   where
-    compilePack _ [] = []
-    compilePack env' (expr':exprs') =
-        compileC env' expr' ++ compilePack (argOffset 1 env') exprs'
+    compileCPack _ [] = []
+    compileCPack env' (expr':exprs') =
+        compileC env' expr' ++ compileCPack (argOffset 1 env') exprs'
 
     compileCVar name
         | name `M.member` asc = [Push $ asc M.! name]
