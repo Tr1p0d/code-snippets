@@ -53,7 +53,7 @@ hSetAt addr node heap = withAddress
 _fromJust :: Lens' (Maybe a) a
 _fromJust = anon (error "_fromJust: Nothing") (\_ -> False)
 
-instance (Pretty a, Show a) => Pretty (Heap a) where
+instance (Show a) => Pretty (Heap a) where
     pPrint = text . show
 
 --prettyHeap :: Heap Node -> Globals -> Doc

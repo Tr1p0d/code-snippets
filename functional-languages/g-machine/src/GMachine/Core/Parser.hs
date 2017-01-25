@@ -53,6 +53,7 @@ parseScDefn = (,,)
     <*> many m_identifier <* m_reserved "="
     <*> parseExpr
 
+parseExpr :: Parser CoreExpr
 parseExpr =
     (try $ parseLet' True)
     <|> parseLet' False
@@ -102,12 +103,9 @@ parseAExpr =
       where
         parseConstr = (,) <$> m_integer <* m_comma <*> m_integer
 
+operatorParser :: Parser CoreExpr
 operatorParser =
     buildExpressionParser operatorTable parseAExpr
-  where
-    parseApplication = do
-        (spineTop:rest) <- many1 parseAExpr
-        return $ foldl EAp spineTop rest
 
 operatorTable :: OperatorTable String u Identity CoreExpr
 operatorTable =

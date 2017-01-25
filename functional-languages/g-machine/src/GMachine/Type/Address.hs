@@ -1,5 +1,4 @@
 {-# LANGUAGE LambdaCase #-}
-
 module GMachine.Type.Address
     ( Address(Addr)
     , GMachine.Type.Address.null

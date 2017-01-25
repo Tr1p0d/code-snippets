@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 module GMachine.Core.Lexer
     ( m_angles
     , m_braces
