@@ -8,7 +8,6 @@ module GMachine
     (evalG)
   where
 
-
 import qualified Data.Map.Strict as M
 
 import Control.Lens

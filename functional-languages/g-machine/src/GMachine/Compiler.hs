@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module GMachine.Compiler
     (compile)
   where
@@ -6,6 +7,7 @@ import qualified Data.Map.Strict as M
 
 import Control.Lens ((&), (?~), at)
 
+import GMachine.Type.Compiler (GCompiledSC)
 import GMachine.Type.Common (Name)
 import GMachine.Type.Core
 import GMachine.Type.Heap (Heap, hAlloc, hInitial)
@@ -46,8 +48,6 @@ buildInitialHeap program =
         (a, newHeap) = hAlloc heap (NGlobal nArgs code)
         newGlobals = globals & getGlobals.at name ?~ a
 
-type GCompiledSC = (Name, Int, GMCode)
-
 compileSc :: CoreScDefn -> GCompiledSC
 compileSc (name, args, expr) =
     (name, length args, compileR expr (zip args [0..]))
@@ -63,7 +63,7 @@ argOffset :: Num b => b -> [(a, b)] -> [(a, b)]
 argOffset n env' = [(v, n+m) | (v,m) <- env']
 
 compileC :: [(Name, Int)] -> Expr Name -> [Instruction]
-compileC env expr = case expr of
+compileC env = \case
     ENum n -> [Pushint n]
     EAp e1 e2 -> compileC env e2 ++ compileC (argOffset 1 env) e1 ++ [Mkap]
     ECase expr' alts -> compileC env expr' ++ [CaseJump (compileAlts alts env)]
