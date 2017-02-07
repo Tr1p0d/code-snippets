@@ -1,13 +1,17 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 module GMachine.Compiler
     (compile)
   where
 
+import Control.Monad.Reader (ask)
+import Control.Monad.State (get)
+import Control.Monad.Writer (tell)
 import qualified Data.Map.Strict as M
 
 import Control.Lens ((&), (?~), at)
 
-import GMachine.Type.Compiler (GCompiledSC)
+import GMachine.Type.Compiler (GMCompiler, GCompiledSC)
 import GMachine.Type.Common (Name)
 import GMachine.Type.Core
 import GMachine.Type.Heap (Heap, hAlloc, hInitial)
@@ -24,53 +28,59 @@ import GMachine.Type.Globals as Glob
 compile :: CoreProgram -> GMState
 compile program = GMState [] initialCode [] [] heap globals
   where
-    (heap, globals) = buildInitialHeap program
+    (heap, globals) = let a=a in a program
     initialCode = [Pushglobal "main", Eval, Print]
+--
+--buildInitialHeap :: CoreProgram -> (Heap Node, Globals)
+--buildInitialHeap program =
+--    foldl alloc (hInitial, Glob.empty) (compiled ++ primitives)
+--  where
+--    primitives =
+--        [ ("+", 2, binary $ Arith Add)
+--        , ("-", 2, binary $ Arith Sub)
+--        , ("*", 2, binary $ Arith Mul)
+--        , ("/", 2, binary $ Arith Div)
+--        , ("==", 2, binary $ Rel Eq)
+--        , ("if", 3,
+--            [Push 0, Eval, Cond [Push 1] [Push 2], Update 3, Pop 3, Unwind])
+--        ]
+--      where
+--        binary op = [Push 1, Eval, Push 1, Eval, op, Update 2, Pop 2, Unwind]
+--    compiled = map compileSc (program ++ preludes)
+--    alloc (heap, globals) (name, nArgs, code) = (newHeap, newGlobals)
+--      where
+--        (a, newHeap) = hAlloc heap (NGlobal nArgs code)
+--        newGlobals = globals & getGlobals.at name ?~ a
+--
+--compileSc :: CoreScDefn -> GCompiledSC
+--compileSc (name, args, expr) =
+--    (name, length args, compileR expr (zip args [0..]))
 
-buildInitialHeap :: CoreProgram -> (Heap Node, Globals)
-buildInitialHeap program =
-    foldl alloc (hInitial, Glob.empty) (compiled ++ primitives)
+--compileR :: CoreExpr -> [(Name, Int)] -> GMCode
+
+compileR :: GMCompiler
+compileR = do
+    d <- length <$> get
+    undefined
+    updateSequence d
   where
-    primitives =
-        [ ("+", 2, binary $ Arith Add)
-        , ("-", 2, binary $ Arith Sub)
-        , ("*", 2, binary $ Arith Mul)
-        , ("/", 2, binary $ Arith Div)
-        , ("==", 2, binary $ Rel Eq)
-        , ("if", 3,
-            [Push 0, Eval, Cond [Push 1] [Push 2], Update 3, Pop 3, Unwind])
-        ]
-      where
-        binary op = [Push 1, Eval, Push 1, Eval, op, Update 2, Pop 2, Unwind]
-    compiled = map compileSc (program ++ preludes)
-    alloc (heap, globals) (name, nArgs, code) = (newHeap, newGlobals)
-      where
-        (a, newHeap) = hAlloc heap (NGlobal nArgs code)
-        newGlobals = globals & getGlobals.at name ?~ a
+    updateSequence d = tell [Update d, Pop d, Unwind]
 
-compileSc :: CoreScDefn -> GCompiledSC
-compileSc (name, args, expr) =
-    (name, length args, compileR expr (zip args [0..]))
-
-compileR :: CoreExpr -> [(Name, Int)] -> GMCode
-compileR e env =
-    let d = length env
-    in compileC env e ++ [Update d, Pop d, Unwind]
-
-type GMCompiler = [(Name, Int)] -> CoreExpr -> GMCode
-
-argOffset :: Num b => b -> [(a, b)] -> [(a, b)]
-argOffset n env' = [(v, n+m) | (v,m) <- env']
-
-compileC :: [(Name, Int)] -> Expr Name -> [Instruction]
-compileC env = \case
-    ENum n -> [Pushint n]
-    EAp e1 e2 -> compileC env e2 ++ compileC (argOffset 1 env) e1 ++ [Mkap]
-    ECase expr' alts -> compileC env expr' ++ [CaseJump (compileAlts alts env)]
-    EConstr tag arity exprs ->
-        compileCPack env (reverse exprs) ++ [Pack tag arity]
-    EVar name -> compileCVar name
-    ELet recursive defs e -> compileCLet recursive defs e
+compileC :: GMCompiler
+compileC = do
+    expr <- ask
+    case expr of
+        ENum n -> tell [Pushint n]
+        EAp e1 e2 -> do
+            compileC e2
+            argOffset 1
+            compileC argOffset 1 env) e1
+            tell [Mkap]
+        ECase expr' alts -> compileC env expr' ++ [CaseJump (compileAlts alts env)]
+        EConstr tag arity exprs ->
+            compileCPack env (reverse exprs) ++ [Pack tag arity]
+        EVar name -> compileCVar name
+        ELet recursive defs e -> compileCLet recursive defs e
     -- I wonder how ELam is compiled...
   where
     compileCPack _ [] = []
