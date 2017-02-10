@@ -4,6 +4,9 @@ module GMachine.Compiler
     (compile)
   where
 
+import Control.Monad ((>=>))
+import qualified Data.List as L (lookup)
+
 import Control.Monad.Reader (ask)
 import Control.Monad.State (get)
 import Control.Monad.Writer (tell)
@@ -11,7 +14,12 @@ import qualified Data.Map.Strict as M
 
 import Control.Lens ((&), (?~), at)
 
-import GMachine.Type.Compiler (GMCompiler, GCompiledSC)
+import GMachine.Type.Compiler
+    ( AlternativesCompiler
+    , GCompiledSC
+    , GMCompiler
+    , argOffset
+    )
 import GMachine.Type.Common (Name)
 import GMachine.Type.Core
 import GMachine.Type.Heap (Heap, hAlloc, hInitial)
@@ -59,39 +67,36 @@ compile program = GMState [] initialCode [] [] heap globals
 --compileR :: CoreExpr -> [(Name, Int)] -> GMCode
 
 compileR :: GMCompiler
-compileR = do
-    d <- length <$> get
-    undefined
-    updateSequence d
+compileR e =
+    compileC e
+    updateSequence
   where
-    updateSequence d = tell [Update d, Pop d, Unwind]
+    updateSequence d = do
+        d <- length <$> get
+        tell [Update d, Pop d, Unwind]
 
 compileC :: GMCompiler
-compileC = do
-    expr <- ask
-    case expr of
-        ENum n -> tell [Pushint n]
-        EAp e1 e2 -> do
-            compileC e2
-            argOffset 1
-            compileC argOffset 1 env) e1
-            tell [Mkap]
-        ECase expr' alts -> compileC env expr' ++ [CaseJump (compileAlts alts env)]
-        EConstr tag arity exprs ->
-            compileCPack env (reverse exprs) ++ [Pack tag arity]
-        EVar name -> compileCVar name
-        ELet recursive defs e -> compileCLet recursive defs e
-    -- I wonder how ELam is compiled...
+compileC = \case
+    ENum n -> tell [Pushint n]
+    EAp e1 e2 -> do
+        compileC e2
+        argOffset 1
+        compileC e1
+        tell [Mkap]
+    ECase expr' alts -> undefined --compileC env expr' ++ [CaseJump (compileAlts alts env)]
+    EConstr tag arity exprs -> do
+        compileCPack (reverse exprs)
+        tell $ [Pack tag arity]
+    EVar name -> compileCVar name
+    ELet recursive defs e -> undefined -- compileCLet recursive defs e
   where
-    compileCPack _ [] = []
-    compileCPack env' (expr':exprs') =
-        compileC env' expr' ++ compileCPack (argOffset 1 env') exprs'
+    compileCPack = mapM_ (compileC >=> const (argOffset 1))
 
-    compileCVar name
-        | name `M.member` asc = [Push $ asc M.! name]
-        | otherwise = [Pushglobal name]
-      where
-        asc = M.fromAscList env
+    compileCVar name = do
+        env <- get
+        maybe
+            (tell $ [Pushglobal name])
+            (tell . (:[]) . Push) $ fromIntegral $ L.lookup name env
 
     compileCLet recursive defs e
         | recursive = compileLetRec compileC defs env e
@@ -101,13 +106,13 @@ compileArgs defs env =
     let n = length defs
     in  (zip (map fst defs) [n-1, n-2 .. 0]) ++ argOffset n env
 
-compileAlts :: [CoreAlt] -> [(Name, Int)] -> [(Integer, GMCode)]
-compileAlts alts env = map compileAlt alts
+compileAlts :: AlternativesCompiler
+compileAlts alts = mapM_ compileAlt alts
   where
     compileAlt (tag, names, body) =
-        let n = length names
-            newEnv = zip names [0..] ++ argOffset n env
-        in (tag, [Split n] ++ compileR body newEnv ++ [Slide n])
+        n <- extendEnvironment names
+        body <- $ compileR body
+        return (tag, [Split n] ++ compileR body newEnv ++ [Slide n])
 
 compileLet :: GMCompiler -> [(Name, CoreExpr)] -> GMCompiler
 compileLet compile' defs env expr =
