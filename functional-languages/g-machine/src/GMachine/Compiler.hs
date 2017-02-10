@@ -1,10 +1,11 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 module GMachine.Compiler
     (compile)
   where
 
-import Control.Monad ((>=>))
+import Control.Monad ((>=>), (<=<))
 import qualified Data.List as L (lookup)
 
 import Control.Monad.Reader (ask)
@@ -16,9 +17,12 @@ import Control.Lens ((&), (?~), at)
 
 import GMachine.Type.Compiler
     ( AlternativesCompiler
+    , Compiler
     , GCompiledSC
     , GMCompiler
     , argOffset
+    , execCompiler
+    , extendEnvironment
     )
 import GMachine.Type.Common (Name)
 import GMachine.Type.Core
@@ -92,11 +96,11 @@ compileC = \case
   where
     compileCPack = mapM_ (compileC >=> const (argOffset 1))
 
-    compileCVar name = do
-        env <- get
+    compileCVar name =
+        get >>=
         maybe
             (tell $ [Pushglobal name])
-            (tell . (:[]) . Push) $ fromIntegral $ L.lookup name env
+            (tell . (:[]) . Push) . fromIntegral . L.lookup name
 
     compileCLet recursive defs e
         | recursive = compileLetRec compileC defs env e
@@ -107,12 +111,18 @@ compileArgs defs env =
     in  (zip (map fst defs) [n-1, n-2 .. 0]) ++ argOffset n env
 
 compileAlts :: AlternativesCompiler
-compileAlts alts = mapM_ compileAlt alts
+compileAlts = tell . (:[]) . CaseJump <=< mapM compileAlt
   where
-    compileAlt (tag, names, body) =
-        n <- extendEnvironment names
-        body <- $ compileR body
-        return (tag, [Split n] ++ compileR body newEnv ++ [Slide n])
+    compileAlt :: CoreAlt -> Compiler (Integer, GMCode)
+    compileAlt (tag, names, body) = do
+        env <- get
+        pure (tag, execCompiler env compileAlt')
+      where
+        compileAlt' = do
+            n <- fromIntegral $ extendEnvironment names
+            tell $ [Split n]
+            compileR body
+            tell $ [Slide n]
 
 compileLet :: GMCompiler -> [(Name, CoreExpr)] -> GMCompiler
 compileLet compile' defs env expr =

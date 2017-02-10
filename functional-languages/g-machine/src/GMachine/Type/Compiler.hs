@@ -8,6 +8,7 @@ module GMachine.Type.Compiler
     , GCompiledSC
     , GMCompiler
     , argOffset
+    , execCompiler
     , extendEnvironment
     , extendEnvironment_
     )
@@ -59,5 +60,6 @@ extendEnvironment names = do
 extendEnvironment_ :: [Name] -> Compiler ()
 extendEnvironment_ = void . extendEnvironment
 
-execCompiler :: GMCompiler -> GMCode
-execCompiler = execWriter . flip execStateT [] . getCompiler
+execCompiler :: SCArgOffset -> Compiler () -> GMCode
+execCompiler env
+    = execWriter . flip execStateT env . getCompiler
