@@ -1,16 +1,18 @@
 {-# Language DeriveFunctor #-}
 {-# Language FlexibleContexts #-}
 {-# Language GeneralizedNewtypeDeriving #-}
-
 module GMachine.Type.Compiler
     ( AlternativesCompiler
     , Compiler
     , GCompiledSC
     , GMCompiler
+    , LetCompiler
     , argOffset
     , execCompiler
     , extendEnvironment
+    , extendEnvironment1
     , extendEnvironment_
+    , extendEnvironment1_
     )
   where
 
@@ -34,7 +36,11 @@ type SCArgOffset = [(Name, Word32)]
 
 type AlternativesCompiler = [CoreAlt] -> Compiler ()
 
+type LetCompiler = LocalDefs -> GMCompiler
+
 type GMCompiler = CoreExpr -> Compiler ()
+
+type LocalDefs = [(Name, CoreExpr)]
 
 -- | Monad that holds the Core Expression and Argument offsets.
 newtype Compiler a =
@@ -60,6 +66,15 @@ extendEnvironment names = do
 extendEnvironment_ :: [Name] -> Compiler ()
 extendEnvironment_ = void . extendEnvironment
 
+extendEnvironment1 :: [Name] -> Compiler Word32
+extendEnvironment1 names = do
+    let n = fromIntegral $ length names
+    argOffset n
+    modify (zip names [n-1, n-2 .. 0] ++)
+    pure n
+
+extendEnvironment1_ :: [Name] -> Compiler ()
+extendEnvironment1_ = void . extendEnvironment1_
+
 execCompiler :: SCArgOffset -> Compiler () -> GMCode
-execCompiler env
-    = execWriter . flip execStateT env . getCompiler
+execCompiler env = execWriter . flip execStateT env . getCompiler
