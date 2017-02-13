@@ -6,6 +6,8 @@ module GMachine.Type.InstructionSet
     )
    where
 
+import Data.Word (Word32)
+
 import Text.PrettyPrint (text)
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint))
 
@@ -16,7 +18,7 @@ type GMCode = [Instruction]
 
 data Instruction
     = Alloc Int
-    | CaseJump [(Integer, GMCode)]
+    | CaseJump [(Word32, GMCode)]
     | Cond GMCode GMCode
     | Eval
     | Mkap

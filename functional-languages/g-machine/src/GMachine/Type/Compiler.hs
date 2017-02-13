@@ -20,14 +20,17 @@ module GMachine.Type.Compiler
     , Compiler
     , GMCompiler
     , LetCompiler
+    , _environment
     , _scArguments
     , _scCode
     , _scName
+    , envLength
     , execCompiler
     , extendEnvironment
     , extendEnvironment1
     , extendEnvironment1_
     , extendEnvironment_
+    , newEnvironment
     , offsetEnvironment
     , restoreEnvironment
     , scArguments
@@ -40,7 +43,9 @@ import Control.Monad (void)
 import Data.Int (Int)
 import Data.Word (Word32)
 
-import Control.Lens (makeLenses)
+import qualified Data.Map as M
+
+import Control.Lens ((%~), makeLenses)
 
 import Control.Monad.Trans.State (StateT)
 import Control.Monad.Trans.Writer (Writer)
@@ -48,7 +53,7 @@ import Control.Monad.State (MonadState, execStateT, get, modify, put)
 import Control.Monad.Writer (MonadWriter, execWriter)
 
 import GMachine.Type.Common (Name)
-import GMachine.Type.Core (CoreAlternatives, CoreExpr)
+import GMachine.Type.Core (CoreAlternatives, CoreExpr, CoreLocalDefinitions)
 import GMachine.Type.InstructionSet (GMCode)
 
 
@@ -61,30 +66,37 @@ makeLenses ''CompiledSupercombinator
 
 type CompiledProgram = [CompiledSupercombinator]
 
-type SCArgOffset = [(Name, Word32)]
+newtype Environment = Environment { _environment :: M.Map Name Word32 }
+  deriving (Show)
+makeLenses ''Environment
 
 type AlternativesCompiler = CoreAlternatives -> Compiler ()
 
-type LetCompiler = LocalDefs -> GMCompiler
+type LetCompiler = CoreLocalDefinitions -> GMCompiler
 
 -- | The GMachine compiler type alias
 type GMCompiler = CoreExpr -> Compiler ()
 
-type LocalDefs = [(Name, CoreExpr)]
-
 -- | Monad that holds the Core Expression and Argument offsets.
 newtype Compiler a =
-    Compiler { getCompiler :: StateT SCArgOffset (Writer GMCode) a }
+    Compiler { getCompiler :: StateT Environment (Writer GMCode) a }
   deriving
     ( Functor
     , Applicative
     , Monad
-    , MonadState SCArgOffset
+    , MonadState Environment
     , MonadWriter GMCode
     )
 
+
+newEnvironment :: [Name] -> Environment
+newEnvironment =  Environment . M.fromList . flip zip [0..]
+
+envLength :: Environment -> Int
+envLength = length . _environment
+
 offsetEnvironment :: Word32 -> Compiler ()
-offsetEnvironment n = modify (\env -> [(v, n+m) | (v,m) <- env])
+offsetEnvironment n = modify (environment %~ M.map (+n))
 
 restoreEnvironment :: Compiler a -> Compiler a
 restoreEnvironment compile = do
@@ -97,7 +109,7 @@ extendEnvironment :: [Name] -> Compiler Word32
 extendEnvironment names = do
     let n = fromIntegral $ length names
     offsetEnvironment n
-    modify (zip names [0..] ++)
+    modify (environment %~ (M.fromList (zip names [0..]) `M.union`))
     pure n
 
 extendEnvironment_ :: [Name] -> Compiler ()
@@ -107,11 +119,11 @@ extendEnvironment1 :: [Name] -> Compiler Word32
 extendEnvironment1 names = do
     let n = fromIntegral $ length names
     offsetEnvironment n
-    modify (zip names [n-1, n-2 .. 0] ++)
+    modify (environment %~ (M.fromList (zip names [n-1, n-2 .. 0]) `M.union`))
     pure n
 
 extendEnvironment1_ :: [Name] -> Compiler ()
 extendEnvironment1_ = void . extendEnvironment1_
 
-execCompiler :: SCArgOffset -> Compiler () -> GMCode
+execCompiler :: Environment -> Compiler () -> GMCode
 execCompiler env = execWriter . flip execStateT env . getCompiler

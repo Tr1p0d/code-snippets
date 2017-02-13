@@ -1,10 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
-
+-- |
+-- Module      : $Header$
+-- Description : The core language parser
+-- Copyright   : (c) Marek Kidon, 2017
+-- License     : GPL-3
+-- Maintainer  : marek.kidon@gmail.com
+-- Stability   : experimental
+-- Portability:  GHC specific language extensions.
+--
+-- This module contains the core language parsec parser.
 module GMachine.Core.Parser
     ( parseCoreProgram )
   where
 
+import Data.Word (Word32)
 import Data.Functor.Identity (Identity)
 
 import Text.Parsec
@@ -12,6 +22,7 @@ import Text.Parsec
     , many
     , many1
     , try
+    , unexpected
     )
 import Text.Parsec.Expr
     ( Assoc(AssocLeft, AssocNone, AssocRight)
@@ -34,13 +45,16 @@ import GMachine.Core.Lexer
     , m_semiSep1
     , m_whiteSpace
     )
-import GMachine.Type.Common (Name)
 import GMachine.Type.Core
-    ( CoreAlternatives
+    ( Alternative(Alternative)
+    , CoreAlternatives
     , CoreExpr
+    , CoreLocalDefinitions
     , CoreProgram
     , CoreSupercombinator
     , Expr(..)
+    , LocalDefinition(LocalDefinition)
+    , Supercombinator(Supercombinator)
     )
 
 
@@ -48,7 +62,7 @@ parseCoreProgram :: Parser CoreProgram
 parseCoreProgram = m_semiSep1 parseScDefn
 
 parseScDefn :: Parser CoreSupercombinator
-parseScDefn = (,,)
+parseScDefn = Supercombinator
     <$> m_identifier
     <*> many m_identifier <* m_reserved "="
     <*> parseExpr
@@ -77,14 +91,14 @@ parseExpr =
             | recursive = "letrec"
             | otherwise = "let"
 
-parseLocalDefinitions :: Parser [(Name, CoreExpr)]
-parseLocalDefinitions = m_semiSep $ (,)
+parseLocalDefinitions :: Parser CoreLocalDefinitions
+parseLocalDefinitions = m_semiSep $ LocalDefinition
     <$> m_identifier <* m_reserved "="
     <*> parseExpr
 
 parseAlternatives :: Parser CoreAlternatives
-parseAlternatives = m_semiSep1 $ (,,)
-    <$> m_angles m_integer
+parseAlternatives = m_semiSep1 $ Alternative
+    <$> m_angles word
     <*> many m_identifier <* m_reserved "->"
     <*> parseExpr
 
@@ -123,3 +137,10 @@ operatorTable =
   where
     reservedOp' x = m_reservedOp x *> return x
     binaryOperator op x y = EVar op `EAp` x `EAp` y
+
+word :: Parser Word32
+word = m_integer >>= word'
+  where
+    word' integer
+        | (integer < 0 && integer >= 4294967295) = fromIntegral <$> pure integer
+        | True = unexpected "integer"

@@ -3,14 +3,25 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
+-- |
+-- Module      : $Header$
+-- Description : The graph machine compiler
+-- Copyright   : (c) Marek Kidon, 2017
+-- License     : GPL-3
+-- Maintainer  : marek.kidon@gmail.com
+-- Stability   : experimental
+-- Portability:  GHC specific language extensions.
+--
+-- This module contains the graph machine compiler implementation
+-- using the graph machine compiler monad.
 module GMachine.Compiler
     (compile)
   where
 
 import Control.Monad ((>=>), (<=<))
-import qualified Data.List as L (lookup)
+import qualified Data.Map as M (lookup)
 
-import Control.Monad.State (get)
+import Control.Monad.State (get, gets)
 import Control.Monad.Writer (tell)
 
 import Control.Lens ((&), (?~), at)
@@ -21,12 +32,15 @@ import GMachine.Type.Compiler
     , CompiledSupercombinator(CompiledSupercombinator)
     , GMCompiler
     , LetCompiler
+    , _environment
     , _scArguments
     , _scCode
     , _scName
+    , envLength
     , execCompiler
     , extendEnvironment
     , extendEnvironment1
+    , newEnvironment
     , offsetEnvironment
     , restoreEnvironment
     )
@@ -51,7 +65,7 @@ buildInitialHeap :: CoreProgram -> (Heap Node, Globals)
 buildInitialHeap program =
     foldl alloc (hInitial, Glob.empty) (compiled ++ precompiledPrimitives)
   where
-    compiled = map compileSc (program ++ preludes)
+    compiled = map compileSc (program ++ prelude)
 
     alloc (heap, globals) CompiledSupercombinator{..} = (newHeap, newGlobals)
       where
@@ -71,10 +85,10 @@ precompiledPrimitives = map (\(a,b,c) -> CompiledSupercombinator a b c)
     binary op = [Push 1, Eval, Push 1, Eval, op, Update 2, Pop 2, Unwind]
 
 compileSc :: CoreSupercombinator -> CompiledSupercombinator
-compileSc (name, args, expr) = CompiledSupercombinator
-    name
-    (length args)
-    (execCompiler (zip args [0..]) $ compileR expr)
+compileSc Supercombinator{..} = CompiledSupercombinator
+    _scName
+    (length _scArguments)
+    (execCompiler (newEnvironment _scArguments) $ compileR _scBody)
 
 compileR :: GMCompiler
 compileR e = do
@@ -82,7 +96,7 @@ compileR e = do
     updateSequence
   where
     updateSequence = do
-        d <- length <$> get
+        d <- envLength <$> get
         tell [Update d, Pop d, Unwind]
 
 compileC :: GMCompiler
@@ -108,10 +122,10 @@ compileC = \case
     compileCPack = mapM_ (compileC >=> const (offsetEnvironment 1))
 
     compileCVar name =
-        get >>=
+        gets _environment >>=
         maybe
             (tell [Pushglobal name])
-            (tell . (:[]) . Push . fromIntegral) . L.lookup name
+            (tell . (:[]) . Push . fromIntegral) . M.lookup name
 
     compileCLet recursive defs e
         | recursive = restoreEnvironment $ compileLetRec defs e
@@ -120,25 +134,25 @@ compileC = \case
 compileAlts :: AlternativesCompiler
 compileAlts = tell . (:[]) . CaseJump <=< mapM compileAlt
   where
-    compileAlt (tag, names, body) = do
+    compileAlt Alternative{..} = do
         env <- get
-        pure (tag, execCompiler env compileAlt')
+        pure (_tag, execCompiler env compileAlt')
       where
         compileAlt' = do
-            n <- fromIntegral <$> extendEnvironment names
+            n <- fromIntegral <$> extendEnvironment _arguments
             tell [Split n]
-            compileR body
+            compileR _body
             tell [Slide n]
 
 compileLet :: LetCompiler
 compileLet defs expr = do
     mapM_ compileLet' defs
-    n <- fromIntegral <$> extendEnvironment1 (map fst defs)
+    n <- fromIntegral <$> extendEnvironment1 (map _ldName defs)
     compileC expr
     tell [Slide n]
   where
-    compileLet' (_,expr') = do
-        compileC expr'
+    compileLet' LocalDefinition{..} = do
+        compileC _ldBody
         offsetEnvironment 1
 
 compileLetRec :: LetCompiler
@@ -149,7 +163,7 @@ compileLetRec defs expr = do
     compileC expr
     tell [Slide n]
   where
-    compileLetRec' ((_, expr'), n) = do
-        compileC expr'
+    compileLetRec' (LocalDefinition{..}, n) = do
+        compileC _ldBody
         tell [Update n]
         offsetEnvironment 1
