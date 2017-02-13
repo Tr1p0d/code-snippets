@@ -19,10 +19,11 @@ import GMachine.Type.Compiler
     , GCompiledSC
     , GMCompiler
     , LetCompiler
-    , argOffset
     , execCompiler
     , extendEnvironment
     , extendEnvironment1
+    , offsetEnvironment
+    , withOffsetEnv
     )
 import GMachine.Type.Core
 import GMachine.Type.Heap (Heap, hAlloc, hInitial)
@@ -83,8 +84,7 @@ compileC = \case
     ENum n -> tell [Pushint n]
     EAp e1 e2 -> do
         compileC e2
-        argOffset 1
-        compileC e1
+        withOffsetEnv (compileC e1) 1
         tell [Mkap]
     ECase expr' alts -> do
         compileC expr'
@@ -96,7 +96,7 @@ compileC = \case
     ELet recursive defs e -> compileCLet recursive defs e
     -- I wonder how the lamda is compiled
   where
-    compileCPack = mapM_ (compileC >=> const (argOffset 1))
+    compileCPack = mapM_ (compileC >=> const (offsetEnvironment 1))
 
     compileCVar name =
         get >>=
@@ -131,7 +131,7 @@ compileLet defs expr = do
   where
     compileLet' (_,expr') = do
         compileC expr'
-        argOffset 1
+        offsetEnvironment 1
 
 compileLetRec :: LetCompiler
 compileLetRec defs expr = do
@@ -144,4 +144,4 @@ compileLetRec defs expr = do
     compileLetRec' ((_, expr'), n) = do
         compileC expr'
         tell [Update n]
-        argOffset 1
+        offsetEnvironment 1

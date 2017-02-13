@@ -7,12 +7,13 @@ module GMachine.Type.Compiler
     , GCompiledSC
     , GMCompiler
     , LetCompiler
-    , argOffset
     , execCompiler
     , extendEnvironment
     , extendEnvironment1
     , extendEnvironment_
     , extendEnvironment1_
+    , offsetEnvironment
+    , withOffsetEnv
     )
   where
 
@@ -22,7 +23,7 @@ import Data.Word (Word32)
 
 import Control.Monad.Trans.State (StateT)
 import Control.Monad.Trans.Writer (Writer)
-import Control.Monad.State (MonadState, execStateT, modify)
+import Control.Monad.State (MonadState, execStateT, get, modify, put)
 import Control.Monad.Writer (MonadWriter, execWriter)
 
 import GMachine.Type.Common (Name)
@@ -53,13 +54,20 @@ newtype Compiler a =
     , MonadWriter GMCode
     )
 
-argOffset :: Word32 -> Compiler ()
-argOffset n = modify (\env -> [(v, n+m) | (v,m) <- env])
+offsetEnvironment :: Word32 -> Compiler ()
+offsetEnvironment n = modify (\env -> [(v, n+m) | (v,m) <- env])
+
+withOffsetEnv :: Compiler () -> Word32 -> Compiler ()
+withOffsetEnv compile n = do
+    s <- get
+    offsetEnvironment n
+    compile
+    put s
 
 extendEnvironment :: [Name] -> Compiler Word32
 extendEnvironment names = do
     let n = fromIntegral $ length names
-    argOffset n
+    offsetEnvironment n
     modify (zip names [0..] ++)
     pure n
 
@@ -69,7 +77,7 @@ extendEnvironment_ = void . extendEnvironment
 extendEnvironment1 :: [Name] -> Compiler Word32
 extendEnvironment1 names = do
     let n = fromIntegral $ length names
-    argOffset n
+    offsetEnvironment n
     modify (zip names [n-1, n-2 .. 0] ++)
     pure n
 
