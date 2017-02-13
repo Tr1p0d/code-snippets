@@ -13,7 +13,7 @@ module GMachine.Type.Compiler
     , extendEnvironment_
     , extendEnvironment1_
     , offsetEnvironment
-    , withOffsetEnv
+    , restoreEnvironment
     )
   where
 
@@ -57,12 +57,12 @@ newtype Compiler a =
 offsetEnvironment :: Word32 -> Compiler ()
 offsetEnvironment n = modify (\env -> [(v, n+m) | (v,m) <- env])
 
-withOffsetEnv :: Compiler () -> Word32 -> Compiler ()
-withOffsetEnv compile n = do
+restoreEnvironment :: Compiler a -> Compiler a
+restoreEnvironment compile = do
     s <- get
-    offsetEnvironment n
-    compile
+    a <- compile
     put s
+    pure a
 
 extendEnvironment :: [Name] -> Compiler Word32
 extendEnvironment names = do

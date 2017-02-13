@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 module GMachine.Compiler
     (compile)
   where
@@ -23,7 +24,7 @@ import GMachine.Type.Compiler
     , extendEnvironment
     , extendEnvironment1
     , offsetEnvironment
-    , withOffsetEnv
+    , restoreEnvironment
     )
 import GMachine.Type.Core
 import GMachine.Type.Heap (Heap, hAlloc, hInitial)
@@ -84,7 +85,9 @@ compileC = \case
     ENum n -> tell [Pushint n]
     EAp e1 e2 -> do
         compileC e2
-        withOffsetEnv (compileC e1) 1
+        restoreEnvironment $ do
+            offsetEnvironment 1
+            compileC e1
         tell [Mkap]
     ECase expr' alts -> do
         compileC expr'
@@ -94,7 +97,8 @@ compileC = \case
         tell [Pack tag arity]
     EVar name -> compileCVar name
     ELet recursive defs e -> compileCLet recursive defs e
-    -- I wonder how the lamda is compiled
+    -- | The anonymous functions (lambdas) are lambda-lifted of and
+    -- given a random name.
   where
     compileCPack = mapM_ (compileC >=> const (offsetEnvironment 1))
 
@@ -105,8 +109,8 @@ compileC = \case
             (tell . (:[]) . Push . fromIntegral) . L.lookup name
 
     compileCLet recursive defs e
-        | recursive = compileLetRec defs e
-        | otherwise = compileLet defs e
+        | recursive = restoreEnvironment $ compileLetRec defs e
+        | otherwise = restoreEnvironment $ compileLet defs e
 
 compileAlts :: AlternativesCompiler
 compileAlts = tell . (:[]) . CaseJump <=< mapM compileAlt
