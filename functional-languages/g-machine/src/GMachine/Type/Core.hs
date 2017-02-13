@@ -18,19 +18,21 @@ data Expr a
         (Expr a) -- Body of let(rec)
     | ECase -- Case expression
         (Expr a) -- Expression to scrutinise
-        [Alter a] -- Alternatives
+        [Alternative a] -- Alternatives
     | ELam [a] (Expr a) -- Lambda abstractions
   deriving (Show)
 type CoreExpr = Expr Name
 
-type Alter a = (Integer, [a], Expr a)
-type CoreAlt = Alter Name
+type Alternative a = (Integer, [a], Expr a)
+type CoreAlternative = Alternative Name
+type CoreAlternatives = [CoreAlternative]
 
-type Program a = [ScDefn a]
+type Supercombinator a = (Name, [a], Expr a)
+type CoreSupercombinator = Supercombinator Name
+
+type Program a = [Supercombinator a]
+
 type CoreProgram = Program Name
-
-type ScDefn a = (Name, [a], Expr a)
-type CoreScDefn = ScDefn Name
 
 preludes :: CoreProgram
 preludes =
@@ -42,6 +44,6 @@ preludes =
     , ("twice", ["f"], EAp (EAp (EVar "compose") (EVar "f")) (EVar "f"))
     ]
 
-s :: CoreScDefn
+s :: CoreSupercombinator
 s = ("S", ["f","g","x"], EAp (EAp (EVar "f") (EVar "x"))
         (EAp (EVar "g") (EVar "x")))

@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 module GMachine.Compiler
@@ -16,10 +17,13 @@ import Control.Lens ((&), (?~), at)
 
 import GMachine.Type.Compiler
     ( AlternativesCompiler
-    , Compiler
-    , GCompiledSC
+    , CompiledProgram
+    , CompiledSupercombinator(CompiledSupercombinator)
     , GMCompiler
     , LetCompiler
+    , _scArguments
+    , _scCode
+    , _scName
     , execCompiler
     , extendEnvironment
     , extendEnvironment1
@@ -30,14 +34,12 @@ import GMachine.Type.Core
 import GMachine.Type.Heap (Heap, hAlloc, hInitial)
 import GMachine.Type.GMState (GMState(GMState), Node(..))
 import GMachine.Type.InstructionSet
-    ( GMCode
-    , Instruction(..)
+    ( Instruction(..)
     , ArithOp(..)
     , RelOp(..)
     )
 import GMachine.Type.Globals as Glob
 
-import Debug.Trace (traceShowId)
 
 compile :: CoreProgram -> GMState
 compile program = GMState [] initialCode [] [] heap globals
@@ -47,29 +49,32 @@ compile program = GMState [] initialCode [] [] heap globals
 
 buildInitialHeap :: CoreProgram -> (Heap Node, Globals)
 buildInitialHeap program =
-    foldl alloc (hInitial, Glob.empty) (compiled ++ primitives)
+    foldl alloc (hInitial, Glob.empty) (compiled ++ precompiledPrimitives)
   where
-    primitives =
-        [ ("+", 2, binary $ Arith Add)
-        , ("-", 2, binary $ Arith Sub)
-        , ("*", 2, binary $ Arith Mul)
-        , ("/", 2, binary $ Arith Div)
-        , ("==", 2, binary $ Rel Eq)
-        , ("if", 3,
-            [Push 0, Eval, Cond [Push 1] [Push 2], Update 3, Pop 3, Unwind])
-        ]
-      where
-        binary op = [Push 1, Eval, Push 1, Eval, op, Update 2, Pop 2, Unwind]
+    compiled = map compileSc (program ++ preludes)
 
-    compiled = map compileSc ((traceShowId program) ++ preludes)
-    alloc (heap, globals) (name, nArgs, code) = (newHeap, newGlobals)
+    alloc (heap, globals) CompiledSupercombinator{..} = (newHeap, newGlobals)
       where
-        (a, newHeap) = hAlloc heap (NGlobal nArgs code)
-        newGlobals = globals & getGlobals.at name ?~ a
+        (a, newHeap) = hAlloc heap (NGlobal _scArguments _scCode)
+        newGlobals = globals & getGlobals.at _scName ?~ a
 
-compileSc :: CoreScDefn -> GCompiledSC
-compileSc (name, args, expr) =
-    (name, length args, execCompiler (zip args [0..]) $ compileR expr)
+precompiledPrimitives :: CompiledProgram
+precompiledPrimitives = map (\(a,b,c) -> CompiledSupercombinator a b c)
+    [ ("+", 2, binary $ Arith Add)
+    , ("-", 2, binary $ Arith Sub)
+    , ("*", 2, binary $ Arith Mul)
+    , ("/", 2, binary $ Arith Div)
+    , ("==", 2, binary $ Rel Eq)
+    , ("if", 3, [Push 0, Eval, Cond [Push 1] [Push 2], Update 3, Pop 3, Unwind])
+    ]
+  where
+    binary op = [Push 1, Eval, Push 1, Eval, op, Update 2, Pop 2, Unwind]
+
+compileSc :: CoreSupercombinator -> CompiledSupercombinator
+compileSc (name, args, expr) = CompiledSupercombinator
+    name
+    (length args)
+    (execCompiler (zip args [0..]) $ compileR expr)
 
 compileR :: GMCompiler
 compileR e = do
@@ -97,7 +102,7 @@ compileC = \case
         tell [Pack tag arity]
     EVar name -> compileCVar name
     ELet recursive defs e -> compileCLet recursive defs e
-    -- | The anonymous functions (lambdas) are lambda-lifted of and
+    -- | The anonymous functions (lambdas) are lambda-lifted and
     -- given a random name.
   where
     compileCPack = mapM_ (compileC >=> const (offsetEnvironment 1))
@@ -115,16 +120,15 @@ compileC = \case
 compileAlts :: AlternativesCompiler
 compileAlts = tell . (:[]) . CaseJump <=< mapM compileAlt
   where
-    compileAlt :: CoreAlt -> Compiler (Integer, GMCode)
     compileAlt (tag, names, body) = do
         env <- get
         pure (tag, execCompiler env compileAlt')
       where
         compileAlt' = do
             n <- fromIntegral <$> extendEnvironment names
-            tell $ [Split n]
+            tell [Split n]
             compileR body
-            tell $ [Slide n]
+            tell [Slide n]
 
 compileLet :: LetCompiler
 compileLet defs expr = do

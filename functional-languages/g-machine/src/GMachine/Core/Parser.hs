@@ -36,10 +36,10 @@ import GMachine.Core.Lexer
     )
 import GMachine.Type.Common (Name)
 import GMachine.Type.Core
-    ( CoreAlt
+    ( CoreAlternatives
     , CoreExpr
     , CoreProgram
-    , CoreScDefn
+    , CoreSupercombinator
     , Expr(..)
     )
 
@@ -47,7 +47,7 @@ import GMachine.Type.Core
 parseCoreProgram :: Parser CoreProgram
 parseCoreProgram = m_semiSep1 parseScDefn
 
-parseScDefn :: Parser CoreScDefn
+parseScDefn :: Parser CoreSupercombinator
 parseScDefn = (,,)
     <$> m_identifier
     <*> many m_identifier <* m_reserved "="
@@ -82,7 +82,7 @@ parseLocalDefinitions = m_semiSep $ (,)
     <$> m_identifier <* m_reserved "="
     <*> parseExpr
 
-parseAlternatives :: Parser [CoreAlt]
+parseAlternatives :: Parser CoreAlternatives
 parseAlternatives = m_semiSep1 $ (,,)
     <$> m_angles m_integer
     <*> many m_identifier <* m_reserved "->"
