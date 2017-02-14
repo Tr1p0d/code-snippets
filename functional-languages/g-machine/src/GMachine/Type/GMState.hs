@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module GMachine.Type.GMState
     ( GMState(GMState)
+    , GMRun
     , _gCode
     , _gDump
     , _gGlobals
@@ -44,6 +45,8 @@ data GMState = GMState
     , _gGlobals :: Globals
     }
 makeLenses ''GMState
+
+type GMRun = [GMState]
 
 instance Pretty GMState where
     pPrint GMState{..} = vcat

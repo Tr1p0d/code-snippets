@@ -88,7 +88,6 @@ newtype Compiler a =
     , MonadWriter GMCode
     )
 
-
 newEnvironment :: [Name] -> Environment
 newEnvironment =  Environment . M.fromList . flip zip [0..]
 
