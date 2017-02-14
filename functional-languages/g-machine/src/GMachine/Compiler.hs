@@ -123,9 +123,9 @@ compileC = \case
 
     compileCVar name =
         gets _environment >>=
-        maybe
-            (tell [Pushglobal name])
-            (tell . (:[]) . Push . fromIntegral) . M.lookup name
+        tell . maybe
+            [Pushglobal name]
+            ((:[]) . Push . fromIntegral) . M.lookup name
 
     compileCLet recursive defs e
         | recursive = restoreEnvironment $ compileLetRec defs e
@@ -139,9 +139,9 @@ compileAlts = tell . (:[]) . CaseJump <=< mapM compileAlt
         pure (_tag, execCompiler env compileAlt')
       where
         compileAlt' = do
-            n <- fromIntegral <$> extendEnvironment _arguments
+            n <- fromIntegral <$> extendEnvironment _altArguments
             tell [Split n]
-            compileR _body
+            compileR _altBody
             tell [Slide n]
 
 compileLet :: LetCompiler

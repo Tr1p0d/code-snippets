@@ -43,7 +43,7 @@ import Control.Monad (void)
 import Data.Int (Int)
 import Data.Word (Word32)
 
-import qualified Data.Map as M
+import qualified Data.Map as M (Map, fromList, map, union)
 
 import Control.Lens ((%~), makeLenses)
 

@@ -69,7 +69,7 @@ parseScDefn = Supercombinator
 
 parseExpr :: Parser CoreExpr
 parseExpr =
-    (try $ parseLet' True)
+    try (parseLet' True)
     <|> parseLet' False
     <|> parseCase
     <|> parseLambda
@@ -125,13 +125,13 @@ operatorTable :: OperatorTable String u Identity CoreExpr
 operatorTable =
     [ [ Infix (m_whiteSpace >> return EAp) AssocLeft
       ]
-    , [ Infix (reservedOp' "*" >>= return . binaryOperator) AssocRight
-      , Infix (reservedOp' "/" >>= return . binaryOperator) AssocNone
+    , [ Infix (binaryOperator <$> reservedOp' "*") AssocRight
+      , Infix (binaryOperator <$> reservedOp' "/") AssocNone
       ]
-    , [ Infix (reservedOp' "+" >>= return . binaryOperator) AssocRight
-      , Infix (reservedOp' "-" >>= return . binaryOperator) AssocNone
+    , [ Infix (binaryOperator <$> reservedOp' "+") AssocRight
+      , Infix (binaryOperator <$> reservedOp' "-") AssocNone
       ]
-    , [ Infix (reservedOp' "==" >>= return . binaryOperator) AssocNone
+    , [ Infix (binaryOperator <$> reservedOp' "==") AssocNone
       ]
     ]
   where
@@ -142,5 +142,5 @@ word :: Parser Word32
 word = m_integer >>= word'
   where
     word' integer
-        | (integer < 0 && integer >= 4294967295) = fromIntegral <$> pure integer
-        | True = unexpected "integer"
+        | integer < 0 && integer >= 4294967295 = fromIntegral <$> pure integer
+        | otherwise = unexpected "integer"

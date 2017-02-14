@@ -53,8 +53,8 @@ type CoreLocalDefinitions = LocalDefinitions Name
 -- {{{ ALTERNATIVES -----------------------------------------------------------
 data Alternative a = Alternative
     { _tag :: Word32
-    , _arguments :: [a]
-    , _body :: Expr a
+    , _altArguments :: [a]
+    , _altBody :: Expr a
     }
   deriving (Show)
 

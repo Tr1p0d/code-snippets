@@ -1,3 +1,13 @@
+-- |
+-- Module      : $Header$
+-- Description : The graph machine instruction set
+-- Copyright   : (c) Marek Kidon, 2017
+-- License     : GPL-3
+-- Maintainer  : marek.kidon@gmail.com
+-- Stability   : experimental
+-- Portability:  GHC specific language extensions.
+--
+-- This module contains the graph machine instruction set.
 module GMachine.Type.InstructionSet
     ( GMCode
     , Instruction(..)
