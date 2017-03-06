@@ -51,7 +51,7 @@ data Type
     = TVar TVarName
     | TCon TConName [Type]
     | TArrow Type Type
-  deriving (Eq, Show)
+  deriving (Show, Eq)
 
 infixr 7 `TArrow`
 
@@ -69,8 +69,8 @@ type Infer = ExceptT TypeError (State InferState)
 
 typeCheck :: Expr -> Either TypeError Scheme
 typeCheck = right enclose . flip evalState emptyState . runExceptT . infer emptyEnv
-  where
-    emptyState = InferState 0
+
+emptyState = InferState 0
 
 emptyEnv = M.empty
 
